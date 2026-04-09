@@ -1,9 +1,17 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="128" fill="#F5F1E8"/>
-  <circle cx="256" cy="256" r="166" fill="#FFFFFF"/>
-  <path d="M256 118C332.216 118 394 179.784 394 256" stroke="#2FDCA4" stroke-width="52" stroke-linecap="round"/>
-  <path d="M394 256C394 332.216 332.216 394 256 394" stroke="#F5D629" stroke-width="52" stroke-linecap="round"/>
-  <path d="M256 394C179.784 394 118 332.216 118 256" stroke="#EF62A9" stroke-width="52" stroke-linecap="round"/>
-  <path d="M118 256C118 179.784 179.784 118 256 118" stroke="#A85BEE" stroke-width="52" stroke-linecap="round"/>
-  <circle cx="256" cy="256" r="60" fill="#21232A"/>
+  <rect width="512" height="512" rx="128" fill="#A67CF8"/>
+  <path d="M112 144H400L376 202H136L112 144Z" fill="#38F080"/>
+  <path d="M146 242C146 174.621 200.621 120 268 120C335.379 120 390 174.621 390 242V316C390 383.379 335.379 438 268 438C200.621 438 146 383.379 146 316V242Z" fill="#FFD84C"/>
+  <path d="M260 98H430L404 160H282L260 98Z" fill="#38F080"/>
+  <path d="M300 120H432L412 182L390 210L412 238L432 310H300L320 238L344 210L320 182L300 120Z" fill="#38F080"/>
+  <circle cx="224" cy="248" r="42" fill="white"/>
+  <circle cx="304" cy="242" r="42" fill="white"/>
+  <circle cx="228" cy="252" r="26" fill="#313131"/>
+  <circle cx="300" cy="246" r="26" fill="#313131"/>
+  <path d="M224 324C247 342 275 342 298 324" stroke="#313131" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="344" cy="242" r="28" fill="white"/>
+  <circle cx="392" cy="242" r="28" fill="white"/>
+  <circle cx="348" cy="246" r="18" fill="#313131"/>
+  <circle cx="388" cy="246" r="18" fill="#313131"/>
+  <path d="M354 288C366 296 378 296 390 288" stroke="#313131" stroke-width="10" stroke-linecap="round"/>
 </svg>

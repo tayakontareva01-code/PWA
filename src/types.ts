@@ -1,45 +1,73 @@
-export type SphereId =
-  | 'health'
+export type CategoryId =
   | 'growth'
   | 'home'
   | 'pleasure'
   | 'finance'
-  | 'chaos';
+  | 'spontaneity'
+  | 'health';
 
-export type PeriodMode = 'month' | 'week' | 'day';
+export type DashboardMode = 'time' | 'amount' | 'percent';
+export type AppScreen = 'splash' | 'calculator' | 'expense' | 'dashboard';
 
 export interface Expense {
   id?: number;
+  deviceId: string;
+  monthKey: string;
+  year: number;
+  month: number;
   amount: number;
-  hours: number;
-  sphere: SphereId;
+  minutes: number;
+  categoryId: CategoryId;
   createdAt: string;
-  hourlyRateAtExpenseTime: number;
+  pendingSync: boolean;
+  syncedAt?: string;
 }
 
-export interface IncomeSettings {
+export interface MonthlyRate {
+  monthKey: string;
+  year: number;
+  month: number;
+  deviceId: string;
   monthlyIncome: number;
-  hoursPerDay: number;
+  hourRate: number;
   updatedAt: string;
+  pendingSync: boolean;
 }
 
-export interface StoredSetting<T> {
+export interface StoredMeta {
   key: string;
-  value: T;
+  value: string;
 }
 
-export interface SphereDefinition {
-  id: SphereId;
+export interface CategoryDefinition {
+  id: CategoryId;
   label: string;
   color: string;
-  tint: string;
+  softColor: string;
 }
 
-export interface AggregatedSphere {
-  id: SphereId;
-  label: string;
-  color: string;
-  tint: string;
-  hours: number;
-  percentage: number;
+export interface Fact {
+  minMinutes: number;
+  maxMinutes: number;
+  text: string;
+}
+
+export interface CategorySummary extends CategoryDefinition {
+  amount: number;
+  minutes: number;
+  percent: number;
+  fillRatio: number;
+}
+
+export interface DashboardSummary {
+  monthlyIncome: number;
+  hourRate: number;
+  totalExpensesAmount: number;
+  totalMinutesSpent: number;
+  totalMonthMinutes: number;
+  spentPercent: number;
+  remainingAmount: number;
+  remainingMinutes: number;
+  remainingPercent: number;
+  categories: CategorySummary[];
 }

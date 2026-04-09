@@ -1,123 +1,46 @@
-import {
-  addDays,
-  addMonths,
-  addWeeks,
-  endOfDay,
-  endOfMonth,
-  endOfWeek,
-  format,
-  getDaysInMonth,
-  isSameMonth,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-  startOfWeek
-} from 'date-fns';
+import { format, getDaysInMonth } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import type { IncomeSettings, PeriodMode } from '../types';
-import { roundToOneDecimal } from './number';
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export function toDate(value: string | Date): Date {
-  return value instanceof Date ? value : parseISO(value);
+export function getMonthKey(date: Date): string {
+  return format(date, 'yyyy-MM');
+}
+
+export function getMonthDate(monthKey: string): Date {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(year, (month ?? 1) - 1, 1, 12);
 }
 
 export function formatMonthLabel(date: Date): string {
   return capitalize(format(date, 'LLLL yyyy', { locale: ru }));
 }
 
-export function formatDayLabel(date: Date): string {
-  return capitalize(format(date, 'd MMMM yyyy', { locale: ru }));
-}
-
-export function formatWeekLabel(date: Date): string {
-  const start = startOfWeek(date, { weekStartsOn: 1 });
-  const end = endOfWeek(date, { weekStartsOn: 1 });
-
-  if (isSameMonth(start, end)) {
-    return `${format(start, 'd', { locale: ru })}-${format(end, 'd MMMM yyyy', {
-      locale: ru
-    })}`;
-  }
-
-  return `${format(start, 'd MMM', { locale: ru })} - ${format(end, 'd MMM yyyy', {
-    locale: ru
-  })}`;
-}
-
-export function getIntervalForPeriod(mode: PeriodMode, anchorDate: Date): {
-  start: Date;
-  end: Date;
-} {
-  if (mode === 'day') {
-    return {
-      start: startOfDay(anchorDate),
-      end: endOfDay(anchorDate)
-    };
-  }
-
-  if (mode === 'week') {
-    return {
-      start: startOfWeek(anchorDate, { weekStartsOn: 1 }),
-      end: endOfWeek(anchorDate, { weekStartsOn: 1 })
-    };
-  }
-
-  return {
-    start: startOfMonth(anchorDate),
-    end: endOfMonth(anchorDate)
-  };
-}
-
-export function shiftDateByMode(date: Date, mode: PeriodMode, direction: 1 | -1): Date {
-  if (mode === 'day') {
-    return addDays(date, direction);
-  }
-
-  if (mode === 'week') {
-    return addWeeks(date, direction);
-  }
-
-  return addMonths(date, direction);
-}
-
 export function toMonthInputValue(date: Date): string {
   return format(date, 'yyyy-MM');
 }
 
-export function toDayInputValue(date: Date): string {
-  return format(date, 'yyyy-MM-dd');
-}
-
-export function parseMonthInputValue(value: string): Date {
-  const [year, month] = value.split('-').map(Number);
-  return new Date(year, (month ?? 1) - 1, 1);
-}
-
-export function parseDayInputValue(value: string): Date {
-  return new Date(`${value}T12:00:00`);
-}
-
-export function getDaysInCurrentMonth(date: Date): number {
+export function getDaysInSelectedMonth(date: Date): number {
   return getDaysInMonth(date);
 }
 
-export function calculateHourlyRate(
-  settings: Pick<IncomeSettings, 'monthlyIncome' | 'hoursPerDay'> | null,
-  date: Date
-): number {
-  if (!settings || settings.monthlyIncome <= 0 || settings.hoursPerDay <= 0) {
+export function getMonthTimeMinutes(date: Date): number {
+  return getDaysInSelectedMonth(date) * 24 * 60;
+}
+
+export function calculateHourlyRate(monthlyIncome: number, date: Date): number {
+  const hoursInMonth = getDaysInSelectedMonth(date) * 24;
+
+  if (monthlyIncome <= 0 || hoursInMonth <= 0) {
     return 0;
   }
 
-  const totalHoursInMonth = getDaysInMonth(date) * settings.hoursPerDay;
+  return monthlyIncome / hoursInMonth;
+}
 
-  if (totalHoursInMonth <= 0) {
-    return 0;
-  }
-
-  return roundToOneDecimal(settings.monthlyIncome / totalHoursInMonth);
+export function shiftMonth(monthKey: string, offset: number): string {
+  const date = getMonthDate(monthKey);
+  return getMonthKey(new Date(date.getFullYear(), date.getMonth() + offset, 1, 12));
 }

@@ -1,178 +1,278 @@
 import { create } from 'zustand';
-import { DEFAULT_HOURS_PER_DAY, UI_STORAGE_KEY } from '../constants';
+import { UI_STORAGE_KEY } from '../constants';
 import { db } from '../db';
-import { calculateHourlyRate } from '../lib/date';
-import { parseNumberInput, roundToOneDecimal } from '../lib/number';
-import type { Expense, IncomeSettings, PeriodMode, SphereId } from '../types';
+import { initDeviceOnServer, syncExpensesToServer, syncRateToServer } from '../lib/api';
+import { getMonthKey, getMonthDate, calculateHourlyRate } from '../lib/date';
+import { ensureDeviceId } from '../lib/device';
+import { parseNumberInput, toMinutesFromAmount } from '../lib/number';
+import type { AppScreen, CategoryId, DashboardMode, Expense, MonthlyRate } from '../types';
 
-type SheetMode = 'entry' | 'calculator' | null;
-
-interface UIStateSnapshot {
-  periodMode: PeriodMode;
-  anchorDate: string;
+interface UiSnapshot {
+  monthKey: string;
+  dashboardMode: DashboardMode;
 }
 
 interface AppStore {
-  expenses: Expense[];
-  incomeSettings: IncomeSettings | null;
-  periodMode: PeriodMode;
-  anchorDate: string;
-  activeSheet: SheetMode;
   isReady: boolean;
-  loadAppData: () => Promise<void>;
-  addExpense: (amountInput: string, sphere: SphereId) => Promise<boolean>;
-  saveIncomeSettings: (monthlyIncomeInput: string, hoursPerDayInput: string) => Promise<boolean>;
-  openEntry: () => void;
+  deviceId: string;
+  activeScreen: AppScreen;
+  selectedMonthKey: string;
+  dashboardMode: DashboardMode;
+  rates: MonthlyRate[];
+  expenses: Expense[];
+  initApp: () => Promise<void>;
+  openDashboard: () => void;
   openCalculator: () => void;
-  closeSheet: () => void;
-  setPeriodMode: (mode: PeriodMode) => void;
-  setAnchorDate: (date: Date) => void;
-  shiftAnchorDate: (direction: 1 | -1) => void;
+  openExpense: () => void;
+  closeOverlay: () => void;
+  setSelectedMonthKey: (monthKey: string) => void;
+  cycleDashboardMode: () => void;
+  saveIncome: (monthlyIncomeInput: string) => Promise<boolean>;
+  addExpense: (amountInput: string, categoryId: CategoryId) => Promise<boolean>;
+  syncPending: () => Promise<void>;
 }
 
-function readUiSnapshot(): UIStateSnapshot {
+function readUiSnapshot(): UiSnapshot {
+  const fallback = {
+    monthKey: getMonthKey(new Date()),
+    dashboardMode: 'time' as DashboardMode
+  };
+
   if (typeof window === 'undefined') {
-    return { periodMode: 'month', anchorDate: new Date().toISOString() };
+    return fallback;
   }
 
   try {
     const raw = window.localStorage.getItem(UI_STORAGE_KEY);
 
     if (!raw) {
-      return { periodMode: 'month', anchorDate: new Date().toISOString() };
+      return fallback;
     }
 
-    const parsed = JSON.parse(raw) as Partial<UIStateSnapshot>;
+    const parsed = JSON.parse(raw) as Partial<UiSnapshot>;
 
     return {
-      periodMode: parsed.periodMode === 'day' || parsed.periodMode === 'week' ? parsed.periodMode : 'month',
-      anchorDate: parsed.anchorDate ?? new Date().toISOString()
+      monthKey: parsed.monthKey ?? fallback.monthKey,
+      dashboardMode:
+        parsed.dashboardMode === 'amount' || parsed.dashboardMode === 'percent'
+          ? parsed.dashboardMode
+          : 'time'
     };
   } catch {
-    return { periodMode: 'month', anchorDate: new Date().toISOString() };
+    return fallback;
   }
 }
 
-function persistUiSnapshot(partial: Partial<UIStateSnapshot>) {
+function persistUiSnapshot(partial: Partial<UiSnapshot>) {
   if (typeof window === 'undefined') {
     return;
   }
 
-  const current = readUiSnapshot();
-  const next = { ...current, ...partial };
+  const next = { ...readUiSnapshot(), ...partial };
   window.localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(next));
+}
+
+function sortRates(rates: MonthlyRate[]): MonthlyRate[] {
+  return [...rates].sort((left, right) => right.monthKey.localeCompare(left.monthKey));
+}
+
+function sortExpenses(expenses: Expense[]): Expense[] {
+  return [...expenses].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
 const initialUi = readUiSnapshot();
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  expenses: [],
-  incomeSettings: null,
-  periodMode: initialUi.periodMode,
-  anchorDate: initialUi.anchorDate,
-  activeSheet: 'entry',
   isReady: false,
-  async loadAppData() {
-    const [expenses, storedSettings] = await Promise.all([
-      db.expenses.toArray(),
-      db.settings.get('incomeSettings')
-    ]);
+  deviceId: '',
+  activeScreen: 'splash',
+  selectedMonthKey: initialUi.monthKey,
+  dashboardMode: initialUi.dashboardMode,
+  rates: [],
+  expenses: [],
+
+  async initApp() {
+    const deviceId = ensureDeviceId();
+    const [rates, expenses] = await Promise.all([db.rates.toArray(), db.expenses.toArray()]);
+    const currentRate = rates.find((item) => item.monthKey === get().selectedMonthKey);
+    const fallbackScreen: AppScreen = currentRate ? 'dashboard' : 'calculator';
 
     set({
-      expenses,
-      incomeSettings: storedSettings?.value ?? null,
-      activeSheet: 'entry',
+      deviceId,
+      rates: sortRates(rates),
+      expenses: sortExpenses(expenses),
+      activeScreen: fallbackScreen,
       isReady: true
     });
-  },
-  async addExpense(amountInput, sphere) {
-    const settings = get().incomeSettings;
-    const amount = parseNumberInput(amountInput);
-    const createdAt = new Date();
-    const hourlyRateAtExpenseTime = calculateHourlyRate(settings, createdAt);
 
-    if (!settings || amount <= 0 || hourlyRateAtExpenseTime <= 0) {
+    void initDeviceOnServer(get().selectedMonthKey);
+    void get().syncPending();
+  },
+
+  openDashboard() {
+    set({ activeScreen: 'dashboard' });
+  },
+
+  openCalculator() {
+    set({ activeScreen: 'calculator' });
+  },
+
+  openExpense() {
+    set({ activeScreen: 'expense' });
+  },
+
+  closeOverlay() {
+    set({ activeScreen: 'dashboard' });
+  },
+
+  setSelectedMonthKey(monthKey) {
+    set({ selectedMonthKey: monthKey });
+    persistUiSnapshot({ monthKey });
+  },
+
+  cycleDashboardMode() {
+    const current = get().dashboardMode;
+    const next: DashboardMode =
+      current === 'time' ? 'amount' : current === 'amount' ? 'percent' : 'time';
+
+    set({ dashboardMode: next });
+    persistUiSnapshot({ dashboardMode: next });
+  },
+
+  async saveIncome(monthlyIncomeInput) {
+    const monthKey = get().selectedMonthKey;
+    const monthDate = getMonthDate(monthKey);
+    const monthlyIncome = parseNumberInput(monthlyIncomeInput);
+    const hourRate = calculateHourlyRate(monthlyIncome, monthDate);
+
+    if (monthlyIncome <= 0 || hourRate <= 0) {
       return false;
     }
 
+    const rate: MonthlyRate = {
+      monthKey,
+      year: monthDate.getFullYear(),
+      month: monthDate.getMonth() + 1,
+      deviceId: get().deviceId,
+      monthlyIncome,
+      hourRate,
+      updatedAt: new Date().toISOString(),
+      pendingSync: true
+    };
+
+    await db.rates.put(rate);
+
+    set((state) => ({
+      rates: sortRates([rate, ...state.rates.filter((item) => item.monthKey !== monthKey)]),
+      activeScreen: 'dashboard'
+    }));
+
+    void get().syncPending();
+
+    return true;
+  },
+
+  async addExpense(amountInput, categoryId) {
+    const monthKey = get().selectedMonthKey;
+    const rate = get().rates.find((item) => item.monthKey === monthKey);
+    const amount = parseNumberInput(amountInput);
+
+    if (!rate || amount <= 0) {
+      return false;
+    }
+
+    const createdAt = new Date().toISOString();
+    const monthDate = getMonthDate(monthKey);
+
     const expense: Expense = {
-      amount: roundToOneDecimal(amount),
-      hours: roundToOneDecimal(amount / hourlyRateAtExpenseTime),
-      sphere,
-      createdAt: createdAt.toISOString(),
-      hourlyRateAtExpenseTime
+      deviceId: get().deviceId,
+      monthKey,
+      year: monthDate.getFullYear(),
+      month: monthDate.getMonth() + 1,
+      amount,
+      minutes: toMinutesFromAmount(amount, rate.hourRate),
+      categoryId,
+      createdAt,
+      pendingSync: true
     };
 
     const id = await db.expenses.add(expense);
 
     set((state) => ({
-      expenses: [...state.expenses, { ...expense, id }],
-      activeSheet: null,
-      anchorDate: createdAt.toISOString()
+      expenses: sortExpenses([{ ...expense, id }, ...state.expenses]),
+      activeScreen: 'dashboard'
     }));
 
-    persistUiSnapshot({ anchorDate: createdAt.toISOString() });
+    void get().syncPending();
 
     return true;
   },
-  async saveIncomeSettings(monthlyIncomeInput, hoursPerDayInput) {
-    const monthlyIncome = parseNumberInput(monthlyIncomeInput);
-    const hoursPerDay =
-      hoursPerDayInput.trim() === ''
-        ? DEFAULT_HOURS_PER_DAY
-        : parseNumberInput(hoursPerDayInput);
 
-    if (monthlyIncome <= 0 || hoursPerDay <= 0) {
-      return false;
+  async syncPending() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return;
     }
 
-    const value: IncomeSettings = {
-      monthlyIncome: roundToOneDecimal(monthlyIncome),
-      hoursPerDay: roundToOneDecimal(hoursPerDay),
-      updatedAt: new Date().toISOString()
-    };
+    const pendingRates = get().rates.filter((rate) => rate.pendingSync);
+    const pendingExpenses = get().expenses.filter((expense) => expense.pendingSync);
 
-    await db.settings.put({ key: 'incomeSettings', value });
+    if (pendingRates.length === 0 && pendingExpenses.length === 0) {
+      return;
+    }
 
-    set({ incomeSettings: value, activeSheet: null });
+    const syncedRateKeys: string[] = [];
 
-    return true;
-  },
-  openEntry() {
-    set({ activeSheet: 'entry' });
-  },
-  openCalculator() {
-    set({ activeSheet: 'calculator' });
-  },
-  closeSheet() {
-    set({ activeSheet: null });
-  },
-  setPeriodMode(mode) {
-    set({ periodMode: mode });
-    persistUiSnapshot({ periodMode: mode });
-  },
-  setAnchorDate(date) {
-    const iso = date.toISOString();
-    set({ anchorDate: iso });
-    persistUiSnapshot({ anchorDate: iso });
-  },
-  shiftAnchorDate(direction) {
-    const currentDate = new Date(get().anchorDate);
-    const mode = get().periodMode;
-    const nextDate =
-      mode === 'day'
-        ? new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + direction, 12)
-        : mode === 'week'
-          ? new Date(
-              currentDate.getFullYear(),
-              currentDate.getMonth(),
-              currentDate.getDate() + direction * 7,
-              12
-            )
-          : new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1, 12);
+    for (const rate of pendingRates) {
+      const synced = await syncRateToServer(rate);
 
-    const iso = nextDate.toISOString();
-    set({ anchorDate: iso });
-    persistUiSnapshot({ anchorDate: iso });
+      if (!synced) {
+        continue;
+      }
+
+      syncedRateKeys.push(rate.monthKey);
+      await db.rates.put({ ...rate, pendingSync: false });
+    }
+
+    let syncedExpenseIds: number[] = [];
+
+    if (pendingExpenses.length > 0) {
+      const synced = await syncExpensesToServer(pendingExpenses);
+
+      if (synced) {
+        syncedExpenseIds = pendingExpenses.flatMap((expense) => (expense.id ? [expense.id] : []));
+
+        await db.transaction('rw', db.expenses, async () => {
+          for (const expense of pendingExpenses) {
+            if (!expense.id) {
+              continue;
+            }
+
+            await db.expenses.update(expense.id, {
+              pendingSync: false,
+              syncedAt: new Date().toISOString()
+            });
+          }
+        });
+      }
+    }
+
+    if (syncedRateKeys.length === 0 && syncedExpenseIds.length === 0) {
+      return;
+    }
+
+    set((state) => ({
+      rates: sortRates(
+        state.rates.map((rate) =>
+          syncedRateKeys.includes(rate.monthKey) ? { ...rate, pendingSync: false } : rate
+        )
+      ),
+      expenses: sortExpenses(
+        state.expenses.map((expense) =>
+          expense.id && syncedExpenseIds.includes(expense.id)
+            ? { ...expense, pendingSync: false, syncedAt: new Date().toISOString() }
+            : expense
+        )
+      )
+    }));
   }
 }));

@@ -1,18 +1,20 @@
 import Dexie, { type Table } from 'dexie';
-import type { Expense, IncomeSettings, StoredSetting } from './types';
+import type { Expense, MonthlyRate, StoredMeta } from './types';
 
-class LifeHoursDatabase extends Dexie {
+class MoneyTimeDatabase extends Dexie {
   expenses!: Table<Expense, number>;
-  settings!: Table<StoredSetting<IncomeSettings>, string>;
+  rates!: Table<MonthlyRate, string>;
+  meta!: Table<StoredMeta, string>;
 
   constructor() {
-    super('life-hours-db');
+    super('money-time-db');
 
     this.version(1).stores({
-      expenses: '++id, createdAt, sphere',
-      settings: '&key'
+      expenses: '++id, deviceId, monthKey, categoryId, createdAt, pendingSync',
+      rates: '&monthKey, deviceId, updatedAt, pendingSync',
+      meta: '&key'
     });
   }
 }
 
-export const db = new LifeHoursDatabase();
+export const db = new MoneyTimeDatabase();
