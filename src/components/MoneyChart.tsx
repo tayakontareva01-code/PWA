@@ -1,10 +1,11 @@
 import { describeDonutSlice } from '../lib/chart';
-import type { CategorySummary, DashboardMode, DashboardSummary } from '../types';
+import type { CategoryId, CategorySummary, DashboardMode, DashboardSummary } from '../types';
 
 interface MoneyChartProps {
   summary: DashboardSummary;
   mode: DashboardMode;
   onToggle: () => void;
+  highlightedCategoryId?: CategoryId | null;
 }
 
 function renderSlotArc(category: CategorySummary, index: number) {
@@ -25,7 +26,12 @@ function renderSlotArc(category: CategorySummary, index: number) {
   };
 }
 
-export function MoneyChart({ summary, mode, onToggle }: MoneyChartProps) {
+export function MoneyChart({
+  summary,
+  mode,
+  onToggle,
+  highlightedCategoryId
+}: MoneyChartProps) {
   return (
     <button className="dashboard-chart" type="button" onClick={onToggle} aria-label="Переключить режим дашборда">
       <div className="dashboard-chart-orbit dashboard-chart-orbit-a">
@@ -40,11 +46,23 @@ export function MoneyChart({ summary, mode, onToggle }: MoneyChartProps) {
 
         {summary.categories.map((category, index) => {
           const arc = renderSlotArc(category, index);
+          const isHighlighted = highlightedCategoryId === category.id;
+          const isDimmed = highlightedCategoryId !== null && highlightedCategoryId !== undefined && !isHighlighted;
 
           return (
-            <g key={category.id}>
-              <path d={arc.trackPath} fill="#eef0f6" />
-              {arc.fillPath ? <path d={arc.fillPath} fill={category.color} /> : null}
+            <g
+              key={category.id}
+              className={`dashboard-chart-slot ${isHighlighted ? 'is-highlighted' : ''} ${isDimmed ? 'is-dimmed' : ''}`}
+            >
+              <path d={arc.trackPath} fill="#eef0f6" className="dashboard-chart-track" />
+              {arc.fillPath ? (
+                <path
+                  d={arc.fillPath}
+                  fill={category.color}
+                  className="dashboard-chart-fill"
+                  style={{ animationDelay: `${index * 70}ms` }}
+                />
+              ) : null}
             </g>
           );
         })}
@@ -56,7 +74,7 @@ export function MoneyChart({ summary, mode, onToggle }: MoneyChartProps) {
         {mode === 'time' ? (
           <>
             <div className="dashboard-chart-primary">{formatMinutes(summary.totalMinutesSpent)}</div>
-            <div className="dashboard-chart-secondary">{formatMinutes(summary.totalMonthMinutes)}</div>
+            <div className="dashboard-chart-secondary">{formatMinutes(summary.totalPeriodMinutes)}</div>
           </>
         ) : null}
 
@@ -67,7 +85,7 @@ export function MoneyChart({ summary, mode, onToggle }: MoneyChartProps) {
               <span className="currency-mark">₽</span>
             </div>
             <div className="dashboard-chart-secondary dashboard-chart-secondary-money">
-              {formatRubles(summary.monthlyIncome)}₽
+              {formatRubles(summary.incomeLimit)}₽
             </div>
           </>
         ) : null}

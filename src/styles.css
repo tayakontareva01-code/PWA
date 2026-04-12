@@ -48,56 +48,9 @@ button {
   overflow: hidden;
 }
 
-.status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: max(14px, env(safe-area-inset-top)) 16px 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #111111;
-}
-
-.status-icons {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-signal,
-.status-wifi,
-.status-battery {
-  display: inline-block;
-  border-radius: 999px;
-  background: #111111;
-}
-
-.status-signal {
-  width: 12px;
-  height: 8px;
-}
-
-.status-wifi {
-  width: 11px;
-  height: 11px;
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-}
-
-.status-battery {
-  width: 18px;
-  height: 9px;
-  position: relative;
-}
-
-.status-battery::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  right: -3px;
-  width: 2px;
-  height: 5px;
-  border-radius: 2px;
-  background: #111111;
+.swipe-screen {
+  touch-action: pan-y;
+  overscroll-behavior-x: contain;
 }
 
 .splash-page {
@@ -111,7 +64,7 @@ button {
 }
 
 .splash-title {
-  padding-top: 138px;
+  padding-top: max(138px, calc(env(safe-area-inset-top) + 90px));
   text-align: center;
 }
 
@@ -135,7 +88,7 @@ button {
 
 .dashboard-screen,
 .entry-screen {
-  padding: 2px 14px 0;
+  padding: max(18px, calc(env(safe-area-inset-top) + 8px)) 14px 0;
 }
 
 .month-select {
@@ -146,6 +99,7 @@ button {
   color: #474a54;
   font-size: 22px;
   font-weight: 700;
+  text-align: left;
 }
 
 .month-caret {
@@ -176,22 +130,25 @@ button {
 
 .dashboard-chart-orbit {
   position: absolute;
-  inset: 16px;
+  inset: 0;
   animation: orbit 28s linear infinite;
   pointer-events: none;
+  z-index: 3;
 }
 
 .dashboard-chart-orbit-a {
+  animation-duration: 22s;
   animation-delay: 0s;
 }
 
 .dashboard-chart-orbit-b {
-  animation-delay: -9s;
+  animation-duration: 33s;
+  animation-delay: -8s;
 }
 
 .dashboard-chart-dot {
   position: absolute;
-  top: 0;
+  top: 6.6667%;
   left: 50%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
@@ -206,6 +163,31 @@ button {
 .dashboard-chart-dot.large {
   width: 16px;
   height: 16px;
+}
+
+.dashboard-chart-slot {
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease,
+    transform 220ms ease;
+}
+
+.dashboard-chart-slot.is-dimmed {
+  opacity: 0.34;
+}
+
+.dashboard-chart-slot.is-highlighted .dashboard-chart-fill {
+  filter: saturate(1.08) brightness(1.02);
+}
+
+.dashboard-chart-slot.is-highlighted .dashboard-chart-track {
+  opacity: 0.92;
+}
+
+.dashboard-chart-fill {
+  transform-box: view-box;
+  transform-origin: 180px 180px;
+  animation: chartPetalIn 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dashboard-chart-center {
@@ -262,7 +244,8 @@ button {
 
 .remaining-label {
   color: #575a64;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .remaining-value {
@@ -282,6 +265,18 @@ button {
   min-height: 94px;
   padding: 10px 12px;
   border-radius: 16px;
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    border-color 180ms ease;
+  border: 2px solid transparent;
+  text-align: left;
+}
+
+.category-card.is-active {
+  border-color: rgba(71, 74, 84, 0.18);
+  box-shadow: 0 10px 18px rgba(87, 94, 119, 0.12);
+  transform: translateY(-1px);
 }
 
 .category-card-top {
@@ -349,6 +344,17 @@ button {
   justify-content: space-between;
 }
 
+.calculator-month-select {
+  margin-top: 0;
+  color: #98a1b3;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.calculator-month-select .month-caret svg path {
+  stroke: #98a1b3;
+}
+
 .back-button {
   width: 28px;
   height: 28px;
@@ -394,7 +400,7 @@ button {
 }
 
 .calculator-screen .screen-title {
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
 .input-block {
@@ -521,8 +527,12 @@ button {
   font-weight: 700;
 }
 
+.result-money .currency-mark {
+  color: #474a54;
+}
+
 .result-field-suffix {
-  color: #a2a9b8;
+  color: #474a54;
   font-size: 18px;
   font-weight: 700;
   margin-left: 4px;
@@ -719,6 +729,71 @@ button {
   font-weight: 800;
 }
 
+.period-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.period-mode-tab {
+  min-height: 36px;
+  border-radius: 12px;
+  background: #f2f3f7;
+  color: #666b78;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.period-mode-tab.is-active {
+  background: #1fe06c;
+  color: #ffffff;
+}
+
+.year-picker-nav {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.year-picker-nav span {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #555863;
+}
+
+.year-picker-arrow {
+  min-height: 40px;
+  border-radius: 14px;
+  background: #f2f3f7;
+  color: #555863;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.year-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.year-picker-tile {
+  min-height: 50px;
+  border-radius: 16px;
+  background: #f7f8fb;
+  color: #555863;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.year-picker-tile.is-active {
+  background: #1fe06c;
+  color: #ffffff;
+}
+
 .month-picker-close {
   width: 28px;
   height: 28px;
@@ -787,6 +862,21 @@ button {
   color: #ffffff !important;
 }
 
+.react-calendar__tile--range {
+  background: #dff8ea !important;
+  color: #2a7750 !important;
+}
+
+.react-calendar__tile--range.react-calendar__tile--active {
+  background: #1fe06c !important;
+  color: #ffffff !important;
+}
+
+.react-calendar__month-view__days__day--neighboringMonth,
+.react-calendar__tile--neighboringMonth {
+  opacity: 0.38;
+}
+
 @keyframes orbit {
   from {
     transform: rotate(0deg);
@@ -794,6 +884,18 @@ button {
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes chartPetalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

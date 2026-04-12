@@ -7,6 +7,7 @@ export type CategoryId =
   | 'health';
 
 export type DashboardMode = 'time' | 'amount' | 'percent';
+export type DashboardPeriod = 'year' | 'month' | 'week' | 'day';
 export type AppScreen = 'splash' | 'calculator' | 'expense' | 'dashboard';
 
 export interface Expense {
@@ -60,11 +61,11 @@ export interface CategorySummary extends CategoryDefinition {
 }
 
 export interface DashboardSummary {
-  monthlyIncome: number;
+  incomeLimit: number;
   hourRate: number;
   totalExpensesAmount: number;
   totalMinutesSpent: number;
-  totalMonthMinutes: number;
+  totalPeriodMinutes: number;
   spentPercent: number;
   remainingAmount: number;
   remainingMinutes: number;

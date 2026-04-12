@@ -5,19 +5,28 @@ import { initDeviceOnServer, syncExpensesToServer, syncRateToServer } from '../l
 import { getMonthKey, getMonthDate, calculateHourlyRate } from '../lib/date';
 import { ensureDeviceId } from '../lib/device';
 import { parseNumberInput, toMinutesFromAmount } from '../lib/number';
-import type { AppScreen, CategoryId, DashboardMode, Expense, MonthlyRate } from '../types';
+import type {
+  AppScreen,
+  CategoryId,
+  DashboardMode,
+  DashboardPeriod,
+  Expense,
+  MonthlyRate
+} from '../types';
 
 interface UiSnapshot {
-  monthKey: string;
+  selectedDateIso: string;
   dashboardMode: DashboardMode;
+  dashboardPeriod: DashboardPeriod;
 }
 
 interface AppStore {
   isReady: boolean;
   deviceId: string;
   activeScreen: AppScreen;
-  selectedMonthKey: string;
+  selectedDateIso: string;
   dashboardMode: DashboardMode;
+  dashboardPeriod: DashboardPeriod;
   rates: MonthlyRate[];
   expenses: Expense[];
   initApp: () => Promise<void>;
@@ -25,17 +34,19 @@ interface AppStore {
   openCalculator: () => void;
   openExpense: () => void;
   closeOverlay: () => void;
-  setSelectedMonthKey: (monthKey: string) => void;
+  setSelectedDate: (date: Date) => void;
+  setDashboardPeriod: (period: DashboardPeriod) => void;
   cycleDashboardMode: () => void;
-  saveIncome: (monthlyIncomeInput: string) => Promise<boolean>;
+  saveIncome: (monthlyIncomeInput: string, targetMonthDate?: Date) => Promise<boolean>;
   addExpense: (amountInput: string, categoryId: CategoryId) => Promise<boolean>;
   syncPending: () => Promise<void>;
 }
 
 function readUiSnapshot(): UiSnapshot {
   const fallback = {
-    monthKey: getMonthKey(new Date()),
-    dashboardMode: 'time' as DashboardMode
+    selectedDateIso: new Date().toISOString(),
+    dashboardMode: 'time' as DashboardMode,
+    dashboardPeriod: 'month' as DashboardPeriod
   };
 
   if (typeof window === 'undefined') {
@@ -50,13 +61,21 @@ function readUiSnapshot(): UiSnapshot {
     }
 
     const parsed = JSON.parse(raw) as Partial<UiSnapshot>;
+    const legacyMonthKey = typeof parsed.selectedDateIso === 'undefined' && 'monthKey' in parsed ? (parsed as { monthKey?: string }).monthKey : undefined;
+    const selectedDateIso = parsed.selectedDateIso ?? (legacyMonthKey ? getMonthDate(legacyMonthKey).toISOString() : fallback.selectedDateIso);
 
     return {
-      monthKey: parsed.monthKey ?? fallback.monthKey,
+      selectedDateIso,
       dashboardMode:
         parsed.dashboardMode === 'amount' || parsed.dashboardMode === 'percent'
           ? parsed.dashboardMode
-          : 'time'
+          : 'time',
+      dashboardPeriod:
+        parsed.dashboardPeriod === 'day' ||
+        parsed.dashboardPeriod === 'week' ||
+        parsed.dashboardPeriod === 'year'
+          ? parsed.dashboardPeriod
+          : 'month'
     };
   } catch {
     return fallback;
@@ -80,21 +99,41 @@ function sortExpenses(expenses: Expense[]): Expense[] {
   return [...expenses].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+function recalculateMonthExpenses(
+  expenses: Expense[],
+  monthKey: string,
+  hourRate: number
+): Expense[] {
+  return expenses.map((expense) => {
+    if (expense.monthKey !== monthKey) {
+      return expense;
+    }
+
+    return {
+      ...expense,
+      minutes: toMinutesFromAmount(expense.amount, hourRate),
+      pendingSync: true,
+      syncedAt: undefined
+    };
+  });
+}
+
 const initialUi = readUiSnapshot();
 
 export const useAppStore = create<AppStore>((set, get) => ({
   isReady: false,
   deviceId: '',
   activeScreen: 'splash',
-  selectedMonthKey: initialUi.monthKey,
+  selectedDateIso: initialUi.selectedDateIso,
   dashboardMode: initialUi.dashboardMode,
+  dashboardPeriod: initialUi.dashboardPeriod,
   rates: [],
   expenses: [],
 
   async initApp() {
     const deviceId = ensureDeviceId();
     const [rates, expenses] = await Promise.all([db.rates.toArray(), db.expenses.toArray()]);
-    const currentRate = rates.find((item) => item.monthKey === get().selectedMonthKey);
+    const currentRate = rates.find((item) => item.monthKey === getMonthKey(new Date(get().selectedDateIso)));
     const fallbackScreen: AppScreen = currentRate ? 'dashboard' : 'calculator';
 
     set({
@@ -105,7 +144,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       isReady: true
     });
 
-    void initDeviceOnServer(get().selectedMonthKey);
+    void initDeviceOnServer(getMonthKey(new Date(get().selectedDateIso)));
     void get().syncPending();
   },
 
@@ -125,9 +164,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ activeScreen: 'dashboard' });
   },
 
-  setSelectedMonthKey(monthKey) {
-    set({ selectedMonthKey: monthKey });
-    persistUiSnapshot({ monthKey });
+  setSelectedDate(date) {
+    const selectedDateIso = date.toISOString();
+    set({ selectedDateIso });
+    persistUiSnapshot({ selectedDateIso });
+  },
+
+  setDashboardPeriod(dashboardPeriod) {
+    set({ dashboardPeriod });
+    persistUiSnapshot({ dashboardPeriod });
   },
 
   cycleDashboardMode() {
@@ -139,9 +184,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     persistUiSnapshot({ dashboardMode: next });
   },
 
-  async saveIncome(monthlyIncomeInput) {
-    const monthKey = get().selectedMonthKey;
-    const monthDate = getMonthDate(monthKey);
+  async saveIncome(monthlyIncomeInput, targetMonthDate) {
+    const monthDate = targetMonthDate ?? new Date(get().selectedDateIso);
+    const monthKey = getMonthKey(monthDate);
     const monthlyIncome = parseNumberInput(monthlyIncomeInput);
     const hourRate = calculateHourlyRate(monthlyIncome, monthDate);
 
@@ -160,12 +205,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
       pendingSync: true
     };
 
-    await db.rates.put(rate);
+    const recalculatedExpenses = recalculateMonthExpenses(get().expenses, monthKey, hourRate);
+    const monthExpenses = recalculatedExpenses.filter((expense) => expense.monthKey === monthKey);
 
-    set((state) => ({
-      rates: sortRates([rate, ...state.rates.filter((item) => item.monthKey !== monthKey)]),
-      activeScreen: 'dashboard'
-    }));
+    await db.transaction('rw', db.rates, db.expenses, async () => {
+      await db.rates.put(rate);
+
+      for (const expense of monthExpenses) {
+        if (!expense.id) {
+          continue;
+        }
+
+        await db.expenses.put(expense);
+      }
+    });
+
+    set((state) => {
+      const nextExpenses = recalculateMonthExpenses(state.expenses, monthKey, hourRate);
+
+      return {
+        rates: sortRates([rate, ...state.rates.filter((item) => item.monthKey !== monthKey)]),
+        expenses: sortExpenses(nextExpenses),
+        activeScreen: 'dashboard'
+      };
+    });
 
     void get().syncPending();
 
@@ -173,7 +236,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   async addExpense(amountInput, categoryId) {
-    const monthKey = get().selectedMonthKey;
+    const selectedDate = new Date(get().selectedDateIso);
+    const monthKey = getMonthKey(selectedDate);
     const rate = get().rates.find((item) => item.monthKey === monthKey);
     const amount = parseNumberInput(amountInput);
 

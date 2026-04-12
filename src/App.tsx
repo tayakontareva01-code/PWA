@@ -4,7 +4,12 @@ import { CategoryIcon, CalculatorIcon, ChevronDownIcon } from './components/Icon
 import { MonthPicker } from './components/MonthPicker';
 import { CATEGORIES, SPLASH_MS } from './constants';
 import { buildDashboardSummary } from './lib/dashboard';
-import { formatMonthLabel, getDaysInSelectedMonth, getMonthDate, getMonthKey } from './lib/date';
+import {
+  formatMonthLabel,
+  formatPeriodLabel,
+  getDaysInSelectedMonth,
+  getMonthKey
+} from './lib/date';
 import { getFactForMinutes } from './lib/facts';
 import {
   formatMinutes,
@@ -15,7 +20,78 @@ import {
   toMinutesFromAmount
 } from './lib/number';
 import { useAppStore } from './store/useAppStore';
-import type { CategoryId, CategorySummary, DashboardMode, DashboardSummary, MonthlyRate } from './types';
+import { playExpenseDoneSound } from './lib/sound';
+import type {
+  CategoryId,
+  CategorySummary,
+  DashboardMode,
+  DashboardPeriod,
+  DashboardSummary,
+  MonthlyRate
+} from './types';
+
+function useHorizontalSwipe({
+  onSwipeLeft,
+  onSwipeRight
+}: {
+  onSwipeLeft?: () => void;
+  onSwipeRight?: () => void;
+}) {
+  const startPoint = useRef<{ x: number; y: number } | null>(null);
+  const isTracking = useRef(false);
+
+  return {
+    onTouchStart(event: React.TouchEvent<HTMLElement>) {
+      const touch = event.changedTouches[0];
+
+      if (!touch) {
+        return;
+      }
+
+      startPoint.current = { x: touch.clientX, y: touch.clientY };
+      isTracking.current = true;
+    },
+    onTouchMove(event: React.TouchEvent<HTMLElement>) {
+      const touch = event.changedTouches[0];
+      const start = startPoint.current;
+
+      if (!touch || !start || !isTracking.current) {
+        return;
+      }
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 12) {
+        event.preventDefault();
+      }
+    },
+    onTouchEnd(event: React.TouchEvent<HTMLElement>) {
+      const touch = event.changedTouches[0];
+      const start = startPoint.current;
+      startPoint.current = null;
+      isTracking.current = false;
+
+      if (!touch || !start) {
+        return;
+      }
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) < 56 || Math.abs(deltaY) > 44) {
+        return;
+      }
+
+      if (deltaX < 0) {
+        onSwipeLeft?.();
+        return;
+      }
+
+      onSwipeRight?.();
+    }
+  };
+}
 
 function MoneyAmount({ value, className = '' }: { value: number; className?: string }) {
   return (
@@ -23,19 +99,6 @@ function MoneyAmount({ value, className = '' }: { value: number; className?: str
       <span>{formatRubles(value)}</span>
       <span className="currency-mark">₽</span>
     </span>
-  );
-}
-
-function StatusBar() {
-  return (
-    <div className="status-bar">
-      <span>9:41</span>
-      <div className="status-icons" aria-hidden="true">
-        <span className="status-signal" />
-        <span className="status-wifi" />
-        <span className="status-battery" />
-      </div>
-    </div>
   );
 }
 
@@ -87,35 +150,48 @@ function SplashScreen() {
 }
 
 function DashboardScreen({
-  monthDate,
-  currentRate,
+  periodLabel,
+  hasIncome,
   summary,
   mode,
-  onOpenMonthPicker,
+  selectedCategoryId,
+  onOpenPeriodPicker,
   onToggleMode,
   onAdd,
-  onOpenCalculator
+  onOpenCalculator,
+  onSelectCategory
 }: {
-  monthDate: Date;
-  currentRate: MonthlyRate | null;
+  periodLabel: string;
+  hasIncome: boolean;
   summary: DashboardSummary;
   mode: DashboardMode;
-  onOpenMonthPicker: () => void;
+  selectedCategoryId: CategoryId | null;
+  onOpenPeriodPicker: () => void;
   onToggleMode: () => void;
   onAdd: () => void;
   onOpenCalculator: () => void;
+  onSelectCategory: (categoryId: CategoryId) => void;
 }) {
-  return (
-    <main className="app-page dashboard-page">
-      <StatusBar />
+  const swipeHandlers = useHorizontalSwipe({
+    onSwipeLeft: onOpenCalculator
+  });
 
+  return (
+    <main className="app-page dashboard-page swipe-screen" {...swipeHandlers}>
       <section className="dashboard-screen">
-        <button className="month-select" type="button" onClick={onOpenMonthPicker}>
-          <span>{formatMonthLabel(monthDate)}</span>
-          <span className="month-caret"><ChevronDownIcon /></span>
+        <button className="month-select" type="button" onClick={onOpenPeriodPicker}>
+          <span>{periodLabel}</span>
+          <span className="month-caret">
+            <ChevronDownIcon />
+          </span>
         </button>
 
-        <MoneyChart summary={summary} mode={mode} onToggle={onToggleMode} />
+        <MoneyChart
+          summary={summary}
+          mode={mode}
+          onToggle={onToggleMode}
+          highlightedCategoryId={selectedCategoryId}
+        />
 
         <div className="remaining-card">
           <span className="remaining-label">Остаток</span>
@@ -128,13 +204,19 @@ function DashboardScreen({
 
         <div className="category-grid">
           {summary.categories.map((category) => (
-            <CategoryCard key={category.id} category={category} mode={mode} />
+            <CategoryCard
+              key={category.id}
+              category={category}
+              mode={mode}
+              active={selectedCategoryId === category.id}
+              onSelect={onSelectCategory}
+            />
           ))}
         </div>
 
-        {!currentRate ? (
+        {!hasIncome ? (
           <div className="dashboard-note">
-            Для этого месяца ставка ещё не задана. Нажмите на иконку справа, чтобы сохранить доход.
+            Для выбранного периода ещё нет лимита дохода. Свайпните влево или нажмите на иконку справа, чтобы открыть калькулятор.
           </div>
         ) : null}
 
@@ -152,9 +234,24 @@ function DashboardScreen({
   );
 }
 
-function CategoryCard({ category, mode }: { category: CategorySummary; mode: DashboardMode }) {
+function CategoryCard({
+  category,
+  mode,
+  active,
+  onSelect
+}: {
+  category: CategorySummary;
+  mode: DashboardMode;
+  active: boolean;
+  onSelect: (categoryId: CategoryId) => void;
+}) {
   return (
-    <article className="category-card" style={{ background: category.softColor }}>
+    <button
+      className={`category-card ${active ? 'is-active' : ''}`}
+      style={{ background: category.softColor }}
+      type="button"
+      onClick={() => onSelect(category.id)}
+    >
       <div className="category-card-top">
         <span className="category-label">{category.label}</span>
         <span className="category-icon">
@@ -166,7 +263,7 @@ function CategoryCard({ category, mode }: { category: CategorySummary; mode: Das
         {mode === 'amount' ? <MoneyAmount value={category.amount} /> : null}
         {mode === 'percent' ? formatPercent(category.percent) : null}
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -175,17 +272,22 @@ function CalculatorScreen({
   initialIncome,
   showWelcome,
   onOpenMonthPicker,
-  onSubmit
+  onSubmit,
+  onSwipeBack
 }: {
   monthDate: Date;
   initialIncome: number;
   showWelcome: boolean;
   onOpenMonthPicker: () => void;
-  onSubmit: (value: string) => Promise<boolean>;
+  onSubmit: (value: string, monthDate: Date) => Promise<boolean>;
+  onSwipeBack: () => void;
 }) {
   const [incomeInput, setIncomeInput] = useState(initialIncome > 0 ? String(Math.round(initialIncome)) : '');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const swipeHandlers = useHorizontalSwipe({
+    onSwipeRight: onSwipeBack
+  });
 
   useEffect(() => {
     setIncomeInput(initialIncome > 0 ? String(Math.round(initialIncome)) : '');
@@ -202,7 +304,7 @@ function CalculatorScreen({
   const hourRate = incomeValue > 0 ? incomeValue / (24 * getDaysInSelectedMonth(monthDate)) : 0;
 
   async function handleDone() {
-    const saved = await onSubmit(incomeInput);
+    const saved = await onSubmit(incomeInput, monthDate);
 
     if (!saved) {
       setError('Введите доход больше нуля.');
@@ -210,11 +312,16 @@ function CalculatorScreen({
   }
 
   return (
-    <main className="app-page entry-page">
-      <StatusBar />
-
+    <main className="app-page entry-page swipe-screen" {...swipeHandlers}>
       <section className="entry-screen calculator-screen">
-        <div className="screen-top-row" />
+        <div className="screen-top-row">
+          <button className="month-select calculator-month-select" type="button" onClick={onOpenMonthPicker}>
+            <span>{formatMonthLabel(monthDate)}</span>
+            <span className="month-caret">
+              <ChevronDownIcon />
+            </span>
+          </button>
+        </div>
 
         {showWelcome ? (
           <section className="welcome-card welcome-card-asset">
@@ -243,10 +350,10 @@ function CalculatorScreen({
 
           <div className="formula-sign-single">×</div>
 
-          <button className="formula-card formula-card-button" type="button" onClick={onOpenMonthPicker}>
+          <div className="formula-card formula-card-button">
             <strong>{getDaysInSelectedMonth(monthDate)} дн</strong>
             <span>{formatMonthLabel(monthDate)}</span>
-          </button>
+          </div>
         </div>
 
         <div className="equal-sign">=</div>
@@ -269,11 +376,11 @@ function CalculatorScreen({
 
 function ExpenseScreen({
   currentRate,
-  onBack,
+  onClose,
   onSubmit
 }: {
   currentRate: MonthlyRate | null;
-  onBack: () => void;
+  onClose: () => void;
   onSubmit: (value: string, categoryId: CategoryId) => Promise<boolean>;
 }) {
   const [amountInput, setAmountInput] = useState('');
@@ -292,6 +399,11 @@ function ExpenseScreen({
   }, []);
 
   async function handleDone() {
+    if (amountInput.trim() === '' && selectedCategory === null) {
+      onClose();
+      return;
+    }
+
     if (!selectedCategory) {
       setError('Выберите категорию.');
       return;
@@ -304,6 +416,7 @@ function ExpenseScreen({
       return;
     }
 
+    playExpenseDoneSound();
     setAmountInput('');
     setSelectedCategory(null);
     setError('');
@@ -311,14 +424,8 @@ function ExpenseScreen({
 
   return (
     <main className="app-page entry-page">
-      <StatusBar />
-
       <section className="entry-screen expense-screen">
-        <div className="screen-top-row">
-          <button className="back-button" type="button" onClick={onBack} aria-label="Назад">
-            ‹
-          </button>
-        </div>
+        <div className="screen-top-row" />
 
         <div className="input-block">
           <InputField
@@ -397,19 +504,23 @@ function getRemainingTimeLabel(remainingMinutes: number) {
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [monthPickerTarget, setMonthPickerTarget] = useState<'dashboard' | 'calculator' | null>(null);
+  const [calculatorMonthDate, setCalculatorMonthDate] = useState(() => new Date());
+  const [selectedCategoryId, setSelectedCategoryId] = useState<CategoryId | null>(null);
 
   const {
     isReady,
     activeScreen,
-    selectedMonthKey,
+    selectedDateIso,
     dashboardMode,
+    dashboardPeriod,
     rates,
     expenses,
     initApp,
     openDashboard,
     openCalculator,
     openExpense,
-    setSelectedMonthKey,
+    setSelectedDate,
+    setDashboardPeriod,
     cycleDashboardMode,
     saveIncome,
     addExpense,
@@ -438,23 +549,46 @@ export default function App() {
     return () => window.removeEventListener('online', handleOnline);
   }, [syncPending]);
 
-  const monthDate = useMemo(() => getMonthDate(selectedMonthKey), [selectedMonthKey]);
+  const selectedDate = useMemo(() => new Date(selectedDateIso), [selectedDateIso]);
+
+  useEffect(() => {
+    if (activeScreen !== 'calculator') {
+      return;
+    }
+
+    setCalculatorMonthDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12));
+  }, [activeScreen, selectedDate]);
+
   const currentRate = useMemo(
-    () => rates.find((rate) => rate.monthKey === selectedMonthKey) ?? null,
-    [rates, selectedMonthKey]
+    () => rates.find((rate) => rate.monthKey === getMonthKey(selectedDate)) ?? null,
+    [rates, selectedDate]
+  );
+  const calculatorRate = useMemo(
+    () => rates.find((rate) => rate.monthKey === getMonthKey(calculatorMonthDate)) ?? null,
+    [calculatorMonthDate, rates]
   );
   const latestRate = useMemo(() => rates[0] ?? null, [rates]);
-  const monthExpenses = useMemo(
-    () => expenses.filter((expense) => expense.monthKey === selectedMonthKey),
-    [expenses, selectedMonthKey]
-  );
   const summary = useMemo(
-    () => buildDashboardSummary(monthExpenses, currentRate, monthDate),
-    [monthExpenses, currentRate, monthDate]
+    () => buildDashboardSummary(expenses, rates, dashboardPeriod, selectedDate),
+    [dashboardPeriod, expenses, rates, selectedDate]
+  );
+  const dashboardLabel = useMemo(
+    () => formatPeriodLabel(dashboardPeriod, selectedDate),
+    [dashboardPeriod, selectedDate]
   );
 
-  function handleMonthPick(date: Date) {
-    setSelectedMonthKey(getMonthKey(date));
+  useEffect(() => {
+    setSelectedCategoryId(null);
+  }, [dashboardPeriod, selectedDateIso]);
+
+  function handlePeriodPick(next: { mode: DashboardPeriod; date: Date }) {
+    if (monthPickerTarget === 'calculator') {
+      setCalculatorMonthDate(new Date(next.date.getFullYear(), next.date.getMonth(), 1, 12));
+      return;
+    }
+
+    setDashboardPeriod(next.mode);
+    setSelectedDate(next.date);
   }
 
   if (!isReady || showSplash) {
@@ -465,25 +599,27 @@ export default function App() {
     <>
       {activeScreen === 'calculator' ? (
         <CalculatorScreen
-          monthDate={monthDate}
-          initialIncome={currentRate?.monthlyIncome ?? latestRate?.monthlyIncome ?? 0}
+          monthDate={calculatorMonthDate}
+          initialIncome={calculatorRate?.monthlyIncome ?? latestRate?.monthlyIncome ?? 0}
           showWelcome={rates.length === 0}
           onOpenMonthPicker={() => setMonthPickerTarget('calculator')}
           onSubmit={saveIncome}
+          onSwipeBack={openDashboard}
         />
       ) : null}
 
       {activeScreen === 'expense' ? (
-        <ExpenseScreen currentRate={currentRate} onBack={openDashboard} onSubmit={addExpense} />
+        <ExpenseScreen currentRate={currentRate} onClose={openDashboard} onSubmit={addExpense} />
       ) : null}
 
       {activeScreen === 'dashboard' ? (
         <DashboardScreen
-          monthDate={monthDate}
-          currentRate={currentRate}
+          periodLabel={dashboardLabel}
+          hasIncome={summary.incomeLimit > 0}
           summary={summary}
           mode={dashboardMode}
-          onOpenMonthPicker={() => setMonthPickerTarget('dashboard')}
+          selectedCategoryId={selectedCategoryId}
+          onOpenPeriodPicker={() => setMonthPickerTarget('dashboard')}
           onToggleMode={cycleDashboardMode}
           onAdd={() => {
             if (!currentRate) {
@@ -494,14 +630,19 @@ export default function App() {
             openExpense();
           }}
           onOpenCalculator={openCalculator}
+          onSelectCategory={(categoryId) =>
+            setSelectedCategoryId((current) => (current === categoryId ? null : categoryId))
+          }
         />
       ) : null}
 
       <MonthPicker
         open={monthPickerTarget !== null}
-        value={monthDate}
+        value={monthPickerTarget === 'calculator' ? calculatorMonthDate : selectedDate}
+        mode={monthPickerTarget === 'calculator' ? 'month' : dashboardPeriod}
+        allowedModes={monthPickerTarget === 'calculator' ? ['month'] : ['year', 'month', 'week', 'day']}
         onClose={() => setMonthPickerTarget(null)}
-        onChange={handleMonthPick}
+        onChange={handlePeriodPick}
       />
     </>
   );
