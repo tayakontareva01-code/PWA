@@ -8,11 +8,27 @@ export type CategoryId =
 
 export type DashboardMode = 'time' | 'amount' | 'percent';
 export type DashboardPeriod = 'year' | 'month' | 'week' | 'day';
-export type AppScreen = 'splash' | 'calculator' | 'expense' | 'dashboard';
+export type AppScreen =
+  | 'splash'
+  | 'auth'
+  | 'calculator'
+  | 'expense'
+  | 'dashboard'
+  | 'profile';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  username: string;
+  photoDataUrl?: string;
+  createdAt: string;
+}
 
 export interface Expense {
   id?: number;
+  remoteId?: string;
   deviceId: string;
+  profileId: string;
   monthKey: string;
   year: number;
   month: number;
@@ -26,6 +42,7 @@ export interface Expense {
 
 export interface MonthlyRate {
   monthKey: string;
+  profileId: string;
   year: number;
   month: number;
   deviceId: string;
@@ -37,7 +54,7 @@ export interface MonthlyRate {
 
 export interface StoredMeta {
   key: string;
-  value: string;
+  value: string | null;
 }
 
 export interface CategoryDefinition {

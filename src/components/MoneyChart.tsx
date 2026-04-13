@@ -82,7 +82,7 @@ export function MoneyChart({
           <>
             <div className="dashboard-chart-primary dashboard-chart-primary-money">
               <span>{formatRubles(summary.totalExpensesAmount)}</span>
-              <span className="currency-mark">₽</span>
+              <span className="currency-mark is-dark">₽</span>
             </div>
             <div className="dashboard-chart-secondary dashboard-chart-secondary-money">
               {formatRubles(summary.incomeLimit)}₽

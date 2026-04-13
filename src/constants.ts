@@ -2,6 +2,7 @@ import type { CategoryDefinition, Fact } from './types';
 
 export const DEVICE_COOKIE_NAME = 'money_time_device_id';
 export const UI_STORAGE_KEY = 'money-time-ui';
+export const DASHBOARD_TUTORIAL_STORAGE_KEY = 'money-time-dashboard-tutorial-seen';
 export const SPLASH_MS = 1350;
 
 export const CATEGORIES: CategoryDefinition[] = [
@@ -44,15 +45,15 @@ export const CATEGORIES: CategoryDefinition[] = [
 ];
 
 export const FACTS: Fact[] = [
-  { minMinutes: 0, maxMinutes: 15, text: 'Это почти как короткая прогулка вокруг дома.' },
-  { minMinutes: 16, maxMinutes: 30, text: 'За это время можно успеть навести порядок на рабочем столе.' },
-  { minMinutes: 31, maxMinutes: 60, text: 'Столько длится хороший эпизод сериала без рекламы.' },
-  { minMinutes: 61, maxMinutes: 90, text: 'Это время полноценной тренировки или долгой прогулки.' },
-  { minMinutes: 91, maxMinutes: 130, text: 'За это время можно послушать примерно 40 песен.' },
-  { minMinutes: 131, maxMinutes: 180, text: 'Это почти как дорога между городами на электричке.' },
-  { minMinutes: 181, maxMinutes: 260, text: 'Столько может занять большой фильм с попкорном и титрами.' },
-  { minMinutes: 261, maxMinutes: 360, text: 'За это время реально прожить маленький выходной без телефона.' },
-  { minMinutes: 361, maxMinutes: 720, text: 'Это уже половина рабочего дня или длинная поездка.' },
-  { minMinutes: 721, maxMinutes: 1440, text: 'Это почти целые сутки вашей жизни.' },
-  { minMinutes: 1441, maxMinutes: 1000000, text: 'Эта трата уже сравнима с заметным куском месяца.' }
+  { minMinutes: 0, maxMinutes: 15, text: 'Это время, за которое пельмени ещё только делают вид, что скоро сварятся.' },
+  { minMinutes: 16, maxMinutes: 30, text: 'За это время можно начать уборку, устать и торжественно перенести её на завтра.' },
+  { minMinutes: 31, maxMinutes: 60, text: 'Столько обычно длится одно “я только быстро посмотрю рилсы”.' },
+  { minMinutes: 61, maxMinutes: 90, text: 'Это уже серьёзный отрезок: хватит и на фильм, и на драму, и на поиск, что бы съесть.' },
+  { minMinutes: 91, maxMinutes: 130, text: 'За это время можно послушать плейлист, который обещал играть фоном, но стал главным событием дня.' },
+  { minMinutes: 131, maxMinutes: 180, text: 'Столько может занять поездка, в которой вы трижды решите, что надо было вообще не выходить из дома.' },
+  { minMinutes: 181, maxMinutes: 260, text: 'Это уже мини-эпоха: можно успеть проголодаться, поесть и снова проголодаться.' },
+  { minMinutes: 261, maxMinutes: 360, text: 'Такой кусок времени уже ощущается как маленькая отдельная жизнь со своим сюжетом.' },
+  { minMinutes: 361, maxMinutes: 720, text: 'Это почти полдня. Организм уже имеет право спросить: “А мы вообще куда идём?”' },
+  { minMinutes: 721, maxMinutes: 1440, text: 'Это почти сутки. Ваш внутренний бухгалтер времени уже тихо плачет в углу.' },
+  { minMinutes: 1441, maxMinutes: 1000000, text: 'Это уже не трата, а полноценный сериал из часов, решений и лёгкого финансового экстрима.' }
 ];

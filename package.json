@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fontsource-variable/raleway": "^5.2.8",
+    "@supabase/supabase-js": "^2.103.0",
     "date-fns": "^4.1.0",
     "dexie": "^4.0.11",
     "react": "^19.1.0",

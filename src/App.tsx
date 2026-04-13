@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import { MoneyChart } from './components/MoneyChart';
-import { CategoryIcon, CalculatorIcon, ChevronDownIcon } from './components/Icons';
+import { CategoryIcon, ChevronDownIcon } from './components/Icons';
 import { MonthPicker } from './components/MonthPicker';
-import { CATEGORIES, SPLASH_MS } from './constants';
+import {
+  CATEGORIES,
+  DASHBOARD_TUTORIAL_STORAGE_KEY,
+  SPLASH_MS
+} from './constants';
 import { buildDashboardSummary } from './lib/dashboard';
 import {
   formatMonthLabel,
@@ -19,15 +23,17 @@ import {
   parseNumberInput,
   toMinutesFromAmount
 } from './lib/number';
-import { useAppStore } from './store/useAppStore';
 import { playExpenseDoneSound } from './lib/sound';
+import { isEmailValid } from './lib/supabase';
+import { useAppStore } from './store/useAppStore';
 import type {
   CategoryId,
   CategorySummary,
   DashboardMode,
   DashboardPeriod,
   DashboardSummary,
-  MonthlyRate
+  MonthlyRate,
+  UserProfile
 } from './types';
 
 function useHorizontalSwipe({
@@ -93,11 +99,19 @@ function useHorizontalSwipe({
   };
 }
 
-function MoneyAmount({ value, className = '' }: { value: number; className?: string }) {
+function MoneyAmount({
+  value,
+  className = '',
+  mutedCurrency = false
+}: {
+  value: number;
+  className?: string;
+  mutedCurrency?: boolean;
+}) {
   return (
     <span className={className}>
       <span>{formatRubles(value)}</span>
-      <span className="currency-mark">₽</span>
+      <span className={`currency-mark ${mutedCurrency ? 'is-muted' : 'is-dark'}`}>₽</span>
     </span>
   );
 }
@@ -134,6 +148,35 @@ function InputField({
   );
 }
 
+function AuthInput({
+  value,
+  placeholder,
+  type = 'text',
+  inputRef,
+  onChange
+}: {
+  value: string;
+  placeholder: string;
+  type?: 'text' | 'password';
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="auth-input">
+      <input
+        ref={inputRef}
+        className="auth-input-control"
+        value={value}
+        type={type}
+        placeholder={placeholder}
+        autoCapitalize="none"
+        autoComplete={type === 'password' ? 'current-password' : 'username'}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
+}
+
 function SplashScreen() {
   return (
     <main className="app-page splash-page">
@@ -149,7 +192,71 @@ function SplashScreen() {
   );
 }
 
+function DashboardTutorial({ open }: { open: boolean }) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="dashboard-tutorial">
+      <div className="dashboard-tutorial-lane left">
+        <div className="dashboard-tutorial-label">Калькулятор</div>
+        <div className="dashboard-tutorial-arrows">
+          <span>←</span>
+          <span>←</span>
+          <span>←</span>
+        </div>
+      </div>
+      <div className="dashboard-tutorial-lane right">
+        <div className="dashboard-tutorial-arrows">
+          <span>→</span>
+          <span>→</span>
+          <span>→</span>
+        </div>
+        <div className="dashboard-tutorial-label">Добавление расхода</div>
+      </div>
+    </div>
+  );
+}
+
+function getInitials(username: string) {
+  const cleaned = username.trim();
+
+  if (!cleaned) {
+    return 'MT';
+  }
+
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+}
+
+function ProfileChip({
+  user,
+  onOpen
+}: {
+  user: UserProfile;
+  onOpen: () => void;
+}) {
+  return (
+    <button className="profile-chip" type="button" aria-label="Открыть профиль" onClick={onOpen}>
+      <span className="profile-chip-avatar">
+        {user.photoDataUrl ? (
+          <img src={user.photoDataUrl} alt={user.username} />
+        ) : (
+          <span>{getInitials(user.username)}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 function DashboardScreen({
+  currentUser,
   periodLabel,
   hasIncome,
   summary,
@@ -159,8 +266,11 @@ function DashboardScreen({
   onToggleMode,
   onAdd,
   onOpenCalculator,
-  onSelectCategory
+  onOpenProfile,
+  onSelectCategory,
+  showTutorial
 }: {
+  currentUser: UserProfile;
   periodLabel: string;
   hasIncome: boolean;
   summary: DashboardSummary;
@@ -170,21 +280,28 @@ function DashboardScreen({
   onToggleMode: () => void;
   onAdd: () => void;
   onOpenCalculator: () => void;
+  onOpenProfile: () => void;
   onSelectCategory: (categoryId: CategoryId) => void;
+  showTutorial: boolean;
 }) {
   const swipeHandlers = useHorizontalSwipe({
-    onSwipeLeft: onOpenCalculator
+    onSwipeLeft: onOpenCalculator,
+    onSwipeRight: onAdd
   });
 
   return (
     <main className="app-page dashboard-page swipe-screen" {...swipeHandlers}>
       <section className="dashboard-screen">
-        <button className="month-select" type="button" onClick={onOpenPeriodPicker}>
-          <span>{periodLabel}</span>
-          <span className="month-caret">
-            <ChevronDownIcon />
-          </span>
-        </button>
+        <div className="dashboard-header">
+          <button className="month-select" type="button" onClick={onOpenPeriodPicker}>
+            <span>{periodLabel}</span>
+            <span className="month-caret">
+              <ChevronDownIcon />
+            </span>
+          </button>
+
+          <ProfileChip user={currentUser} onOpen={onOpenProfile} />
+        </div>
 
         <MoneyChart
           summary={summary}
@@ -216,20 +333,13 @@ function DashboardScreen({
 
         {!hasIncome ? (
           <div className="dashboard-note">
-            Для выбранного периода ещё нет лимита дохода. Свайпните влево или нажмите на иконку справа, чтобы открыть калькулятор.
+            Для выбранного периода ещё нет лимита дохода. Свайпните влево, чтобы открыть калькулятор и
+            задать ставку.
           </div>
         ) : null}
-
-        <div className="dashboard-actions">
-          <button className="primary-action" type="button" onClick={onAdd}>
-            Добавить
-          </button>
-
-          <button className="icon-action" type="button" onClick={onOpenCalculator} aria-label="Открыть калькулятор">
-            <CalculatorIcon />
-          </button>
-        </div>
       </section>
+
+      <DashboardTutorial open={showTutorial} />
     </main>
   );
 }
@@ -252,16 +362,18 @@ function CategoryCard({
       type="button"
       onClick={() => onSelect(category.id)}
     >
-      <div className="category-card-top">
-        <span className="category-label">{category.label}</span>
-        <span className="category-icon">
-          <CategoryIcon categoryId={category.id} size={20} />
-        </span>
-      </div>
-      <div className="category-value">
-        {mode === 'time' ? formatMinutes(category.minutes) : null}
-        {mode === 'amount' ? <MoneyAmount value={category.amount} /> : null}
-        {mode === 'percent' ? formatPercent(category.percent) : null}
+      <div className="category-card-inner">
+        <div className="category-card-top">
+          <span className="category-label">{category.label}</span>
+          <span className="category-icon">
+            <CategoryIcon categoryId={category.id} size={20} />
+          </span>
+        </div>
+        <div className="category-value">
+          {mode === 'time' ? formatMinutes(category.minutes) : null}
+          {mode === 'amount' ? <MoneyAmount value={category.amount} /> : null}
+          {mode === 'percent' ? formatPercent(category.percent) : null}
+        </div>
       </div>
     </button>
   );
@@ -387,6 +499,9 @@ function ExpenseScreen({
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const swipeHandlers = useHorizontalSwipe({
+    onSwipeLeft: onClose
+  });
 
   const amountValue = parseNumberInput(amountInput);
   const minutes = currentRate ? toMinutesFromAmount(amountValue, currentRate.hourRate) : 0;
@@ -423,7 +538,7 @@ function ExpenseScreen({
   }
 
   return (
-    <main className="app-page entry-page">
+    <main className="app-page entry-page swipe-screen" {...swipeHandlers}>
       <section className="entry-screen expense-screen">
         <div className="screen-top-row" />
 
@@ -493,6 +608,212 @@ function ExpenseScreen({
   );
 }
 
+function AuthScreen({
+  onLogin,
+  onRegister
+}: {
+  onLogin: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  onRegister: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const usernameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    usernameRef.current?.focus();
+  }, []);
+
+  const normalizedUsername = username.trim().toLowerCase();
+  const hasEmailError = normalizedUsername.length > 0 && !isEmailValid(normalizedUsername);
+
+  async function handleSubmit() {
+    if (hasEmailError) {
+      setError('Введите корректный email.');
+      return;
+    }
+
+    const result =
+      mode === 'login'
+        ? await onLogin(username, password)
+        : await onRegister(username, password);
+
+    if (!result.ok) {
+      setError(result.error ?? 'Не удалось выполнить действие.');
+      return;
+    }
+
+    setError('');
+  }
+
+  return (
+    <main className="app-page auth-page">
+      <section className="entry-screen auth-screen">
+        <div className="auth-hero">
+          <img src="/auth-hero.svg" alt="Money Time" />
+        </div>
+
+        <div className="auth-switch">
+          <button
+            className={`auth-switch-button ${mode === 'login' ? 'is-active' : ''}`}
+            type="button"
+            onClick={() => {
+              setMode('login');
+              setError('');
+            }}
+          >
+            Войти
+          </button>
+          <button
+            className={`auth-switch-button ${mode === 'register' ? 'is-active' : ''}`}
+            type="button"
+            onClick={() => {
+              setMode('register');
+              setError('');
+            }}
+          >
+            Зарегистрироваться
+          </button>
+        </div>
+
+        <form
+          className="auth-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <AuthInput
+            value={username}
+            placeholder="E-mail"
+            inputRef={usernameRef}
+            onChange={(value) => {
+              setUsername(value);
+
+              if (error) {
+                setError('');
+              }
+            }}
+          />
+          <AuthInput
+            value={password}
+            placeholder="Пароль"
+            type="password"
+            onChange={(value) => {
+              setPassword(value);
+
+              if (error) {
+                setError('');
+              }
+            }}
+          />
+        </form>
+
+        {hasEmailError && !error ? (
+          <div className="error-text auth-error">Введите корректный email.</div>
+        ) : error ? (
+          <div className="error-text auth-error">{error}</div>
+        ) : (
+          <div className="error-spacer auth-error" />
+        )}
+
+        <button
+          className="done-button auth-submit-button"
+          type="button"
+          onClick={() => void handleSubmit()}
+        >
+          {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function ProfileScreen({
+  user,
+  onClose,
+  onLogout,
+  onPhotoChange
+}: {
+  user: UserProfile;
+  onClose: () => void;
+  onLogout: () => Promise<void>;
+  onPhotoChange: (photoDataUrl: string) => Promise<void>;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const swipeHandlers = useHorizontalSwipe({
+    onSwipeRight: onClose
+  });
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+
+      if (result) {
+        void onPhotoChange(result);
+      }
+    };
+
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }
+
+  return (
+    <main className="app-page profile-page swipe-screen" {...swipeHandlers}>
+      <section className="entry-screen profile-screen">
+        <div className="profile-top-row">
+          <button className="profile-close" type="button" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+
+        <div className="profile-card">
+          <button
+            className="profile-avatar-large"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {user.photoDataUrl ? (
+              <img src={user.photoDataUrl} alt={user.username} />
+            ) : (
+              <span>{getInitials(user.username)}</span>
+            )}
+          </button>
+
+          <input
+            ref={fileInputRef}
+            className="sr-only"
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+
+          <div className="profile-name">{user.username}</div>
+
+          <button className="profile-photo-button" type="button" onClick={() => fileInputRef.current?.click()}>
+            Добавить фотографию
+          </button>
+        </div>
+
+        <div className="profile-actions">
+          <button className="profile-text-action" type="button" onClick={() => void onLogout()}>
+            Выйти из профиля
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function getRemainingTimeLabel(remainingMinutes: number) {
   if (remainingMinutes <= 0) {
     return '0 - все потрачено';
@@ -506,10 +827,12 @@ export default function App() {
   const [monthPickerTarget, setMonthPickerTarget] = useState<'dashboard' | 'calculator' | null>(null);
   const [calculatorMonthDate, setCalculatorMonthDate] = useState(() => new Date());
   const [selectedCategoryId, setSelectedCategoryId] = useState<CategoryId | null>(null);
+  const [hasSeenDashboardTutorial, setHasSeenDashboardTutorial] = useState<boolean>(true);
 
   const {
     isReady,
     activeScreen,
+    currentUser,
     selectedDateIso,
     dashboardMode,
     dashboardPeriod,
@@ -519,11 +842,16 @@ export default function App() {
     openDashboard,
     openCalculator,
     openExpense,
+    openProfile,
     setSelectedDate,
     setDashboardPeriod,
     cycleDashboardMode,
     saveIncome,
     addExpense,
+    login,
+    register,
+    logout,
+    updateProfilePhoto,
     syncPending
   } = useAppStore();
 
@@ -548,6 +876,22 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [syncPending]);
+
+  const tutorialStorageKey = useMemo(
+    () =>
+      currentUser
+        ? `${DASHBOARD_TUTORIAL_STORAGE_KEY}-${currentUser.id}`
+        : DASHBOARD_TUTORIAL_STORAGE_KEY,
+    [currentUser]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    setHasSeenDashboardTutorial(window.localStorage.getItem(tutorialStorageKey) === 'true');
+  }, [tutorialStorageKey]);
 
   const selectedDate = useMemo(() => new Date(selectedDateIso), [selectedDateIso]);
 
@@ -581,6 +925,25 @@ export default function App() {
     setSelectedCategoryId(null);
   }, [dashboardPeriod, selectedDateIso]);
 
+  const shouldShowDashboardTutorial =
+    activeScreen === 'dashboard' && !hasSeenDashboardTutorial && currentUser !== null;
+
+  useEffect(() => {
+    if (!shouldShowDashboardTutorial) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setHasSeenDashboardTutorial(true);
+
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(tutorialStorageKey, 'true');
+      }
+    }, 3200);
+
+    return () => window.clearTimeout(timer);
+  }, [shouldShowDashboardTutorial, tutorialStorageKey]);
+
   function handlePeriodPick(next: { mode: DashboardPeriod; date: Date }) {
     if (monthPickerTarget === 'calculator') {
       setCalculatorMonthDate(new Date(next.date.getFullYear(), next.date.getMonth(), 1, 12));
@@ -597,6 +960,13 @@ export default function App() {
 
   return (
     <>
+      {activeScreen === 'auth' ? (
+        <AuthScreen
+          onLogin={login}
+          onRegister={register}
+        />
+      ) : null}
+
       {activeScreen === 'calculator' ? (
         <CalculatorScreen
           monthDate={calculatorMonthDate}
@@ -612,8 +982,9 @@ export default function App() {
         <ExpenseScreen currentRate={currentRate} onClose={openDashboard} onSubmit={addExpense} />
       ) : null}
 
-      {activeScreen === 'dashboard' ? (
+      {activeScreen === 'dashboard' && currentUser ? (
         <DashboardScreen
+          currentUser={currentUser}
           periodLabel={dashboardLabel}
           hasIncome={summary.incomeLimit > 0}
           summary={summary}
@@ -630,9 +1001,20 @@ export default function App() {
             openExpense();
           }}
           onOpenCalculator={openCalculator}
+          onOpenProfile={openProfile}
           onSelectCategory={(categoryId) =>
             setSelectedCategoryId((current) => (current === categoryId ? null : categoryId))
           }
+          showTutorial={shouldShowDashboardTutorial}
+        />
+      ) : null}
+
+      {activeScreen === 'profile' && currentUser ? (
+        <ProfileScreen
+          user={currentUser}
+          onClose={openDashboard}
+          onLogout={logout}
+          onPhotoChange={updateProfilePhoto}
         />
       ) : null}
 
