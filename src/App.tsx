@@ -99,6 +99,66 @@ function useHorizontalSwipe({
   };
 }
 
+function useKeyboardInset() {
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const viewport = window.visualViewport;
+
+    if (!viewport) {
+      return;
+    }
+
+    function updateKeyboardInset() {
+      if (!viewport) {
+        return;
+      }
+
+      const nextInset = Math.max(
+        0,
+        Math.round(window.innerHeight - viewport.height - viewport.offsetTop)
+      );
+      setKeyboardInset(nextInset);
+    }
+
+    updateKeyboardInset();
+    viewport.addEventListener('resize', updateKeyboardInset);
+    viewport.addEventListener('scroll', updateKeyboardInset);
+    window.addEventListener('orientationchange', updateKeyboardInset);
+
+    return () => {
+      viewport.removeEventListener('resize', updateKeyboardInset);
+      viewport.removeEventListener('scroll', updateKeyboardInset);
+      window.removeEventListener('orientationchange', updateKeyboardInset);
+    };
+  }, []);
+
+  return keyboardInset;
+}
+
+function FloatingDoneButton({
+  onClick,
+  keyboardInset
+}: {
+  onClick: () => void;
+  keyboardInset: number;
+}) {
+  return (
+    <div
+      className="floating-done-shell"
+      style={{ '--keyboard-inset': `${keyboardInset}px` } as CSSProperties}
+    >
+      <button className="done-button floating-done-button" type="button" onClick={onClick}>
+        Готово
+      </button>
+    </div>
+  );
+}
+
 function MoneyAmount({
   value,
   className = '',
@@ -397,6 +457,7 @@ function CalculatorScreen({
   const [incomeInput, setIncomeInput] = useState(initialIncome > 0 ? String(Math.round(initialIncome)) : '');
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const keyboardInset = useKeyboardInset();
   const swipeHandlers = useHorizontalSwipe({
     onSwipeRight: onSwipeBack
   });
@@ -425,7 +486,7 @@ function CalculatorScreen({
 
   return (
     <main className="app-page entry-page swipe-screen" {...swipeHandlers}>
-      <section className="entry-screen calculator-screen">
+      <section className="entry-screen calculator-screen has-floating-done">
         <div className="screen-top-row">
           <button className="month-select calculator-month-select" type="button" onClick={onOpenMonthPicker}>
             <span>{formatMonthLabel(monthDate)}</span>
@@ -477,11 +538,8 @@ function CalculatorScreen({
         <p className="result-caption">Цена часа жизни с учётом сна, отдыха, всего</p>
 
         {error ? <div className="error-text">{error}</div> : <div className="error-spacer" />}
-
-        <button className="done-button" type="button" onClick={() => void handleDone()}>
-          Готово
-        </button>
       </section>
+      <FloatingDoneButton keyboardInset={keyboardInset} onClick={() => void handleDone()} />
     </main>
   );
 }
@@ -499,6 +557,7 @@ function ExpenseScreen({
   const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const keyboardInset = useKeyboardInset();
   const swipeHandlers = useHorizontalSwipe({
     onSwipeLeft: onClose
   });
@@ -539,7 +598,7 @@ function ExpenseScreen({
 
   return (
     <main className="app-page entry-page swipe-screen" {...swipeHandlers}>
-      <section className="entry-screen expense-screen">
+      <section className="entry-screen expense-screen has-floating-done">
         <div className="screen-top-row" />
 
         <div className="input-block">
@@ -599,11 +658,8 @@ function ExpenseScreen({
         )}
 
         {error ? <div className="error-text">{error}</div> : <div className="error-spacer" />}
-
-        <button className="done-button" type="button" onClick={() => void handleDone()}>
-          Готово
-        </button>
       </section>
+      <FloatingDoneButton keyboardInset={keyboardInset} onClick={() => void handleDone()} />
     </main>
   );
 }
@@ -619,6 +675,7 @@ function AuthScreen({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
   const usernameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -629,6 +686,8 @@ function AuthScreen({
   const hasEmailError = normalizedUsername.length > 0 && !isEmailValid(normalizedUsername);
 
   async function handleSubmit() {
+    setHasTriedSubmit(true);
+
     if (hasEmailError) {
       setError('Введите корректный email.');
       return;
@@ -661,6 +720,7 @@ function AuthScreen({
             onClick={() => {
               setMode('login');
               setError('');
+              setHasTriedSubmit(false);
             }}
           >
             Войти
@@ -671,6 +731,7 @@ function AuthScreen({
             onClick={() => {
               setMode('register');
               setError('');
+              setHasTriedSubmit(false);
             }}
           >
             Зарегистрироваться
@@ -710,7 +771,7 @@ function AuthScreen({
           />
         </form>
 
-        {hasEmailError && !error ? (
+        {hasTriedSubmit && hasEmailError && !error ? (
           <div className="error-text auth-error">Введите корректный email.</div>
         ) : error ? (
           <div className="error-text auth-error">{error}</div>

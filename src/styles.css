@@ -23,7 +23,7 @@ body,
 }
 
 body {
-  background: #f5f6fb;
+  background: #ffffff;
 }
 
 button,
@@ -41,7 +41,7 @@ button {
 }
 
 .app-page {
-  width: min(100%, 390px);
+  width: 100%;
   min-height: 100svh;
   margin: 0 auto;
   background: #ffffff;
@@ -766,6 +766,27 @@ button {
   margin-top: 8px;
 }
 
+.has-floating-done {
+  padding-bottom: calc(108px + env(safe-area-inset-bottom));
+}
+
+.floating-done-shell {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--keyboard-inset, 0px) + 12px);
+  z-index: 30;
+  width: min(calc(100vw - 28px), 390px);
+  transform: translateX(-50%);
+  padding: 0 14px;
+  pointer-events: none;
+}
+
+.floating-done-button {
+  margin-top: 0;
+  box-shadow: 0 12px 30px rgba(31, 224, 108, 0.2);
+  pointer-events: auto;
+}
+
 .auth-page {
   background: #ffffff;
 }
@@ -1223,7 +1244,16 @@ button {
 }
 
 @media (min-width: 640px) {
+  body {
+    background: #f5f6fb;
+  }
+
   .app-page {
+    width: min(100%, 390px);
     box-shadow: 0 12px 44px rgba(57, 69, 101, 0.08);
+  }
+
+  .floating-done-shell {
+    width: min(calc(100vw - 28px), 390px);
   }
 }
