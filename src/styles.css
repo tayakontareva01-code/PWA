@@ -815,16 +815,19 @@ button {
 
 .auth-page {
   background: #ffffff;
+  overflow: hidden;
 }
 
 .auth-screen {
   display: flex;
   flex-direction: column;
+  height: 100svh;
   min-height: 100svh;
+  padding-top: max(8px, calc(env(safe-area-inset-top) + 2px));
 }
 
 .auth-hero {
-  margin-top: 40px;
+  margin-top: 10px;
   border-radius: 24px;
   overflow: hidden;
   box-shadow: 0 22px 44px rgba(126, 102, 205, 0.16);
