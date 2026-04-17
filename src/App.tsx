@@ -142,10 +142,12 @@ function useKeyboardInset() {
 
 function FloatingDoneButton({
   onClick,
-  keyboardInset
+  keyboardInset,
+  label = 'Готово'
 }: {
   onClick: () => void;
   keyboardInset: number;
+  label?: string;
 }) {
   return (
     <div
@@ -153,7 +155,7 @@ function FloatingDoneButton({
       style={{ '--keyboard-inset': `${keyboardInset}px` } as CSSProperties}
     >
       <button className="done-button floating-done-button" type="button" onClick={onClick}>
-        Готово
+        {label}
       </button>
     </div>
   );
@@ -677,6 +679,7 @@ function AuthScreen({
   const [error, setError] = useState('');
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
   const usernameRef = useRef<HTMLInputElement>(null);
+  const keyboardInset = useKeyboardInset();
 
   useEffect(() => {
     usernameRef.current?.focus();
@@ -708,7 +711,7 @@ function AuthScreen({
 
   return (
     <main className="app-page auth-page">
-      <section className="entry-screen auth-screen">
+      <section className="entry-screen auth-screen has-floating-done">
         <div className="auth-hero">
           <img src="/auth-hero.svg" alt="Money Time" />
         </div>
@@ -778,15 +781,12 @@ function AuthScreen({
         ) : (
           <div className="error-spacer auth-error" />
         )}
-
-        <button
-          className="done-button auth-submit-button"
-          type="button"
-          onClick={() => void handleSubmit()}
-        >
-          {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
-        </button>
       </section>
+      <FloatingDoneButton
+        keyboardInset={keyboardInset}
+        label={mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+        onClick={() => void handleSubmit()}
+      />
     </main>
   );
 }
