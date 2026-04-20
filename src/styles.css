@@ -20,10 +20,20 @@ body,
 #root {
   min-height: 100%;
   margin: 0;
+  scrollbar-width: none;
 }
 
 body {
   background: #ffffff;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 button,
@@ -112,6 +122,7 @@ button {
 
 .dashboard-screen {
   min-height: 100svh;
+  padding-bottom: calc(92px + env(safe-area-inset-bottom));
 }
 
 .month-select {
@@ -398,6 +409,56 @@ button {
   line-height: 1.35;
 }
 
+.dashboard-fab-layer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 12;
+  width: min(100%, 390px);
+  margin: 0 auto;
+  padding: 0 14px;
+  pointer-events: none;
+}
+
+.dashboard-fab {
+  position: absolute;
+  bottom: 0;
+  z-index: 5;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(91, 98, 121, 0.16);
+  pointer-events: auto;
+}
+
+.dashboard-fab-add {
+  left: 14px;
+  background: #1fe06c;
+  color: #ffffff;
+}
+
+.dashboard-fab-add span {
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.dashboard-fab-calculator {
+  right: 14px;
+  background: #ffffff;
+  color: #8a91a1;
+}
+
+.dashboard-fab-calculator svg {
+  width: 20px;
+  height: 20px;
+}
+
 .dashboard-tutorial {
   position: absolute;
   inset: 0;
@@ -541,10 +602,20 @@ button {
 
 .calculator-screen .screen-title {
   margin-top: 14px;
+  white-space: nowrap;
+  font-size: 22px;
 }
 
 .calculator-screen {
   padding-top: max(12px, calc(env(safe-area-inset-top) + 4px));
+}
+
+.calculator-screen .equal-sign {
+  margin-top: 1px;
+}
+
+.calculator-screen .result-field {
+  margin-top: 4px;
 }
 
 .input-block {
@@ -1289,6 +1360,101 @@ button {
 
   50% {
     transform: translateX(12px) scale(1.06);
+    opacity: 1;
+  }
+}
+
+.app-screen-shell {
+  position: relative;
+  min-height: 100svh;
+}
+
+.app-screen-shell.is-transitioning {
+  will-change: transform, opacity;
+}
+
+.app-screen-shell.is-transitioning.is-left {
+  animation: screenSlideOutLeft 420ms cubic-bezier(0.2, 0.84, 0.24, 1) both;
+}
+
+.app-screen-shell.is-transitioning.is-right {
+  animation: screenSlideOutRight 420ms cubic-bezier(0.2, 0.84, 0.24, 1) both;
+}
+
+.screen-transition-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.screen-transition-layer.is-below {
+  z-index: 35;
+}
+
+.screen-transition-layer.is-above {
+  z-index: 45;
+}
+
+.screen-transition-screen {
+  position: absolute;
+  inset: 0;
+  will-change: transform, opacity;
+}
+
+.screen-transition-layer.is-left .screen-transition-screen-to {
+  animation: screenSlideInRight 420ms cubic-bezier(0.2, 0.84, 0.24, 1) both;
+}
+
+.screen-transition-layer.is-right .screen-transition-screen-to {
+  animation: screenSlideInLeft 420ms cubic-bezier(0.2, 0.84, 0.24, 1) both;
+}
+
+@keyframes screenSlideOutLeft {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate3d(-16%, 0, 0);
+    opacity: 0.985;
+  }
+}
+
+@keyframes screenSlideInRight {
+  from {
+    transform: translate3d(100%, 0, 0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes screenSlideOutRight {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate3d(16%, 0, 0);
+    opacity: 0.985;
+  }
+}
+
+@keyframes screenSlideInLeft {
+  from {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
     opacity: 1;
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import { MoneyChart } from './components/MoneyChart';
-import { CategoryIcon, ChevronDownIcon } from './components/Icons';
+import { CalculatorIcon, CategoryIcon, ChevronDownIcon } from './components/Icons';
 import { MonthPicker } from './components/MonthPicker';
 import {
   CATEGORIES,
@@ -27,6 +27,7 @@ import { playExpenseDoneSound } from './lib/sound';
 import { isEmailValid } from './lib/supabase';
 import { useAppStore } from './store/useAppStore';
 import type {
+  AppScreen,
   CategoryId,
   CategorySummary,
   DashboardMode,
@@ -35,6 +36,8 @@ import type {
   MonthlyRate,
   UserProfile
 } from './types';
+
+const SCREEN_TRANSITION_MS = 420;
 
 function useHorizontalSwipe({
   onSwipeLeft,
@@ -402,6 +405,26 @@ function DashboardScreen({
       </section>
 
       <DashboardTutorial open={showTutorial} />
+
+      <div className="dashboard-fab-layer">
+        <button
+          className="dashboard-fab dashboard-fab-add"
+          type="button"
+          aria-label="Добавить расход"
+          onClick={onAdd}
+        >
+          <span>+</span>
+        </button>
+
+        <button
+          className="dashboard-fab dashboard-fab-calculator"
+          type="button"
+          aria-label="Открыть калькулятор"
+          onClick={onOpenCalculator}
+        >
+          <CalculatorIcon />
+        </button>
+      </div>
     </main>
   );
 }
@@ -445,6 +468,7 @@ function CalculatorScreen({
   monthDate,
   initialIncome,
   showWelcome,
+  autoFocusInput = true,
   onOpenMonthPicker,
   onSubmit,
   onSwipeBack
@@ -452,6 +476,7 @@ function CalculatorScreen({
   monthDate: Date;
   initialIncome: number;
   showWelcome: boolean;
+  autoFocusInput?: boolean;
   onOpenMonthPicker: () => void;
   onSubmit: (value: string, monthDate: Date) => Promise<boolean>;
   onSwipeBack: () => void;
@@ -470,10 +495,14 @@ function CalculatorScreen({
   }, [initialIncome, monthDate]);
 
   useEffect(() => {
+    if (!autoFocusInput) {
+      return;
+    }
+
     inputRef.current?.focus();
     const length = inputRef.current?.value.length ?? 0;
     inputRef.current?.setSelectionRange(length, length);
-  }, []);
+  }, [autoFocusInput]);
 
   const incomeValue = parseNumberInput(incomeInput);
   const hourRate = incomeValue > 0 ? incomeValue / (24 * getDaysInSelectedMonth(monthDate)) : 0;
@@ -483,7 +512,11 @@ function CalculatorScreen({
 
     if (!saved) {
       setError('Введите доход больше нуля.');
+      return;
     }
+
+    setError('');
+    onSwipeBack();
   }
 
   return (
@@ -548,10 +581,12 @@ function CalculatorScreen({
 
 function ExpenseScreen({
   currentRate,
+  autoFocusInput = true,
   onClose,
   onSubmit
 }: {
   currentRate: MonthlyRate | null;
+  autoFocusInput?: boolean;
   onClose: () => void;
   onSubmit: (value: string, categoryId: CategoryId) => Promise<boolean>;
 }) {
@@ -569,10 +604,14 @@ function ExpenseScreen({
   const factText = getFactForMinutes(minutes);
 
   useEffect(() => {
+    if (!autoFocusInput) {
+      return;
+    }
+
     inputRef.current?.focus();
     const length = inputRef.current?.value.length ?? 0;
     inputRef.current?.setSelectionRange(length, length);
-  }, []);
+  }, [autoFocusInput]);
 
   async function handleDone() {
     if (amountInput.trim() === '' && selectedCategory === null) {
@@ -593,9 +632,8 @@ function ExpenseScreen({
     }
 
     playExpenseDoneSound();
-    setAmountInput('');
-    setSelectedCategory(null);
     setError('');
+    onClose();
   }
 
   return (
@@ -889,6 +927,12 @@ export default function App() {
   const [calculatorMonthDate, setCalculatorMonthDate] = useState(() => new Date());
   const [selectedCategoryId, setSelectedCategoryId] = useState<CategoryId | null>(null);
   const [hasSeenDashboardTutorial, setHasSeenDashboardTutorial] = useState<boolean>(true);
+  const [screenTransition, setScreenTransition] = useState<{
+    from: AppScreen;
+    to: AppScreen;
+    direction: 'left' | 'right';
+  } | null>(null);
+  const transitionTimerRef = useRef<number | null>(null);
 
   const {
     isReady,
@@ -919,6 +963,14 @@ export default function App() {
   useEffect(() => {
     void initApp();
   }, [initApp]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimerRef.current !== null) {
+        window.clearTimeout(transitionTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isReady) {
@@ -961,7 +1013,18 @@ export default function App() {
       return;
     }
 
-    setCalculatorMonthDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12));
+    setCalculatorMonthDate((current) => {
+      const next = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+
+      if (
+        current.getFullYear() === next.getFullYear() &&
+        current.getMonth() === next.getMonth()
+      ) {
+        return current;
+      }
+
+      return next;
+    });
   }, [activeScreen, selectedDate]);
 
   const currentRate = useMemo(
@@ -988,6 +1051,125 @@ export default function App() {
 
   const shouldShowDashboardTutorial =
     activeScreen === 'dashboard' && !hasSeenDashboardTutorial && currentUser !== null;
+
+  function runScreenTransition(nextScreen: AppScreen, direction: 'left' | 'right', commit: () => void) {
+    if (screenTransition) {
+      return;
+    }
+
+    if (activeScreen === nextScreen) {
+      commit();
+      return;
+    }
+
+    if (transitionTimerRef.current !== null) {
+      window.clearTimeout(transitionTimerRef.current);
+    }
+
+    setScreenTransition({
+      from: activeScreen,
+      to: nextScreen,
+      direction
+    });
+
+    transitionTimerRef.current = window.setTimeout(() => {
+      commit();
+      setScreenTransition(null);
+      transitionTimerRef.current = null;
+    }, SCREEN_TRANSITION_MS);
+  }
+
+  function openDashboardFromCalculator() {
+    runScreenTransition('dashboard', 'right', openDashboard);
+  }
+
+  function openDashboardFromExpense() {
+    runScreenTransition('dashboard', 'left', openDashboard);
+  }
+
+  function openCalculatorAnimated() {
+    setCalculatorMonthDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12));
+    runScreenTransition('calculator', 'left', openCalculator);
+  }
+
+  function openExpenseAnimated() {
+    if (!currentRate) {
+      openCalculatorAnimated();
+      return;
+    }
+
+    runScreenTransition('expense', 'right', openExpense);
+  }
+
+  function renderScreen(screen: AppScreen, keySuffix = 'static') {
+    if (screen === 'auth') {
+      return <AuthScreen key={`auth-${keySuffix}`} onLogin={login} onRegister={register} />;
+    }
+
+    if (screen === 'calculator') {
+      return (
+        <CalculatorScreen
+          key={`calculator-${keySuffix}`}
+          monthDate={calculatorMonthDate}
+          initialIncome={calculatorRate?.monthlyIncome ?? latestRate?.monthlyIncome ?? 0}
+          showWelcome={rates.length === 0}
+          autoFocusInput={keySuffix !== 'transition'}
+          onOpenMonthPicker={() => setMonthPickerTarget('calculator')}
+          onSubmit={saveIncome}
+          onSwipeBack={openDashboardFromCalculator}
+        />
+      );
+    }
+
+    if (screen === 'expense') {
+      return (
+        <ExpenseScreen
+          key={`expense-${keySuffix}`}
+          currentRate={currentRate}
+          autoFocusInput={keySuffix !== 'transition'}
+          onClose={openDashboardFromExpense}
+          onSubmit={addExpense}
+        />
+      );
+    }
+
+    if (screen === 'dashboard' && currentUser) {
+      return (
+        <DashboardScreen
+          key={`dashboard-${keySuffix}`}
+          currentUser={currentUser}
+          periodLabel={dashboardLabel}
+          hasIncome={summary.incomeLimit > 0}
+          summary={summary}
+          mode={dashboardMode}
+          selectedCategoryId={selectedCategoryId}
+          onOpenPeriodPicker={() => setMonthPickerTarget('dashboard')}
+          onToggleMode={cycleDashboardMode}
+          onAdd={openExpenseAnimated}
+          onOpenCalculator={openCalculatorAnimated}
+          onOpenProfile={openProfile}
+          onSelectCategory={(categoryId) =>
+            setSelectedCategoryId((current) => (current === categoryId ? null : categoryId))
+          }
+          showTutorial={shouldShowDashboardTutorial}
+        />
+      );
+    }
+
+    if (screen === 'profile' && currentUser) {
+      return (
+        <ProfileScreen
+          key={`profile-${keySuffix}`}
+          user={currentUser}
+          onClose={openDashboard}
+          onLogout={logout}
+          onPhotoChange={updateProfilePhoto}
+        />
+      );
+    }
+
+    return null;
+  }
 
   useEffect(() => {
     if (!shouldShowDashboardTutorial) {
@@ -1021,62 +1203,26 @@ export default function App() {
 
   return (
     <>
-      {activeScreen === 'auth' ? (
-        <AuthScreen
-          onLogin={login}
-          onRegister={register}
-        />
-      ) : null}
+      <div
+        className={
+          screenTransition
+            ? `app-screen-shell is-transitioning is-${screenTransition.direction}`
+            : 'app-screen-shell'
+        }
+      >
+        {renderScreen(activeScreen)}
+      </div>
 
-      {activeScreen === 'calculator' ? (
-        <CalculatorScreen
-          monthDate={calculatorMonthDate}
-          initialIncome={calculatorRate?.monthlyIncome ?? latestRate?.monthlyIncome ?? 0}
-          showWelcome={rates.length === 0}
-          onOpenMonthPicker={() => setMonthPickerTarget('calculator')}
-          onSubmit={saveIncome}
-          onSwipeBack={openDashboard}
-        />
-      ) : null}
-
-      {activeScreen === 'expense' ? (
-        <ExpenseScreen currentRate={currentRate} onClose={openDashboard} onSubmit={addExpense} />
-      ) : null}
-
-      {activeScreen === 'dashboard' && currentUser ? (
-        <DashboardScreen
-          currentUser={currentUser}
-          periodLabel={dashboardLabel}
-          hasIncome={summary.incomeLimit > 0}
-          summary={summary}
-          mode={dashboardMode}
-          selectedCategoryId={selectedCategoryId}
-          onOpenPeriodPicker={() => setMonthPickerTarget('dashboard')}
-          onToggleMode={cycleDashboardMode}
-          onAdd={() => {
-            if (!currentRate) {
-              openCalculator();
-              return;
-            }
-
-            openExpense();
-          }}
-          onOpenCalculator={openCalculator}
-          onOpenProfile={openProfile}
-          onSelectCategory={(categoryId) =>
-            setSelectedCategoryId((current) => (current === categoryId ? null : categoryId))
-          }
-          showTutorial={shouldShowDashboardTutorial}
-        />
-      ) : null}
-
-      {activeScreen === 'profile' && currentUser ? (
-        <ProfileScreen
-          user={currentUser}
-          onClose={openDashboard}
-          onLogout={logout}
-          onPhotoChange={updateProfilePhoto}
-        />
+      {screenTransition ? (
+        <div
+          className={`screen-transition-layer is-${screenTransition.direction} ${
+            screenTransition.from === 'dashboard' ? 'is-above' : 'is-below'
+          }`}
+        >
+          <div className="screen-transition-screen screen-transition-screen-to">
+            {renderScreen(screenTransition.to, 'transition')}
+          </div>
+        </div>
       ) : null}
 
       <MonthPicker

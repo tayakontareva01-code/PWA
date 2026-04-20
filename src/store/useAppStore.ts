@@ -437,8 +437,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
       return {
         rates: sortRates([rate, ...state.rates.filter((item) => item.monthKey !== monthKey)]),
-        expenses: sortExpenses(nextExpenses),
-        activeScreen: 'dashboard'
+        expenses: sortExpenses(nextExpenses)
       };
     });
 
@@ -486,8 +485,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
 
     set((state) => ({
-      expenses: sortExpenses([{ ...expense, id, remoteId }, ...state.expenses]),
-      activeScreen: 'dashboard'
+      expenses: sortExpenses([{ ...expense, id, remoteId }, ...state.expenses])
     }));
 
     void get().syncPending();

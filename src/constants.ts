@@ -26,7 +26,7 @@ export const CATEGORIES: CategoryDefinition[] = [
   },
   {
     id: 'finance',
-    label: 'Финансы',
+    label: 'Регулярные',
     color: '#ff8ddd',
     softColor: '#ffe0f5'
   },
